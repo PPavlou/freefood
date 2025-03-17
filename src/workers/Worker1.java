@@ -124,6 +124,33 @@ public class Worker1 {
                 stores.put(store.getStoreName(), store);
             }
             return "Store " + store.getStoreName() + " added successfully.";
+        } else if (command.equals("PURCHASE_PRODUCT")) {
+            // Expected data format: "storeName|productName|quantity"
+            String[] parts = data.split("\\|");
+            if (parts.length < 3) {
+                return "Invalid data for PURCHASE_PRODUCT.";
+            }
+            String storeName = parts[0];
+            String productName = parts[1];
+            int quantity;
+            try {
+                quantity = Integer.parseInt(parts[2]);
+            } catch (NumberFormatException e) {
+                return "Invalid quantity format.";
+            }
+            synchronized (stores) {
+                Store store = stores.get(storeName);
+                if (store != null) {
+                    boolean success = store.purchaseProduct(productName, quantity);
+                    if (success) {
+                        return "Purchase successful for " + quantity + " of " + productName + " from store " + storeName + ".";
+                    } else {
+                        return "Purchase failed: insufficient stock or product not found.";
+                    }
+                } else {
+                    return "Store " + storeName + " not found.";
+                }
+            }
         } else if (command.equals("ADD_PRODUCT")) {
             // Expected data format: "storeName|productJson"
             String[] parts = data.split("\\|", 2);
