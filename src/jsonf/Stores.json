@@ -1,0 +1,256 @@
+[
+  {
+    "StoreName": "PizzaWorld",
+    "Latitude": 37.991234,
+    "Longitude": 23.732111,
+    "FoodCategory": "pizzeria",
+    "Stars": 4,
+    "NoOfVotes": 22,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Pepperoni",
+        "ProductType": "pizza",
+        "Available Amount": 120,
+        "Price": 10.5
+      },
+      {
+        "ProductName": "Margherita",
+        "ProductType": "pizza",
+        "Available Amount": 80,
+        "Price": 8.5
+      }
+    ]
+  },
+  {
+    "StoreName": "CoffeeCorner",
+    "Latitude": 37.9932963,
+    "Longitude": 23.733413,
+    "FoodCategory": "coffee",
+    "Stars": 5,
+    "NoOfVotes": 45,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Espresso",
+        "ProductType": "coffee",
+        "Available Amount": 100,
+        "Price": 2.5
+      },
+      {
+        "ProductName": "Cappuccino",
+        "ProductType": "coffee",
+        "Available Amount": 150,
+        "Price": 3.0
+      },
+      {
+        "ProductName": "Sandwich",
+        "ProductType": "snack",
+        "Available Amount": 50,
+        "Price": 3.5
+      }
+    ]
+  },
+  {
+    "StoreName": "SouvlakiKing",
+    "Latitude": 37.991111,
+    "Longitude": 23.730567,
+    "FoodCategory": "greek",
+    "Stars": 3,
+    "NoOfVotes": 12,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Pork Souvlaki",
+        "ProductType": "souvlaki",
+        "Available Amount": 200,
+        "Price": 2.2
+      },
+      {
+        "ProductName": "Chicken Gyros",
+        "ProductType": "gyros",
+        "Available Amount": 150,
+        "Price": 2.5
+      }
+    ]
+  },
+  {
+    "StoreName": "BurgerZone",
+    "Latitude": 37.995678,
+    "Longitude": 23.736789,
+    "FoodCategory": "burger",
+    "Stars": 4,
+    "NoOfVotes": 30,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Classic Burger",
+        "ProductType": "burger",
+        "Available Amount": 90,
+        "Price": 6.0
+      },
+      {
+        "ProductName": "Cheese Burger",
+        "ProductType": "burger",
+        "Available Amount": 100,
+        "Price": 6.5
+      },
+      {
+        "ProductName": "French Fries",
+        "ProductType": "side",
+        "Available Amount": 200,
+        "Price": 2.0
+      }
+    ]
+  },
+  {
+    "StoreName": "BakeryDelight",
+    "Latitude": 37.998999,
+    "Longitude": 23.740123,
+    "FoodCategory": "bakery",
+    "Stars": 5,
+    "NoOfVotes": 28,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Croissant",
+        "ProductType": "pastry",
+        "Available Amount": 60,
+        "Price": 1.8
+      },
+      {
+        "ProductName": "Baguette",
+        "ProductType": "bread",
+        "Available Amount": 40,
+        "Price": 2.2
+      }
+    ]
+  },
+  {
+    "StoreName": "AsiaFusion",
+    "Latitude": 37.989432,
+    "Longitude": 23.745678,
+    "FoodCategory": "asian",
+    "Stars": 4,
+    "NoOfVotes": 33,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Spring Rolls",
+        "ProductType": "appetizer",
+        "Available Amount": 100,
+        "Price": 5.0
+      },
+      {
+        "ProductName": "Sweet & Sour Chicken",
+        "ProductType": "main",
+        "Available Amount": 80,
+        "Price": 8.0
+      },
+      {
+        "ProductName": "Fried Rice",
+        "ProductType": "main",
+        "Available Amount": 120,
+        "Price": 6.5
+      }
+    ]
+  },
+  {
+    "StoreName": "TacoPlace",
+    "Latitude": 37.990123,
+    "Longitude": 23.729999,
+    "FoodCategory": "mexican",
+    "Stars": 2,
+    "NoOfVotes": 10,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Beef Taco",
+        "ProductType": "taco",
+        "Available Amount": 150,
+        "Price": 3.2
+      },
+      {
+        "ProductName": "Chicken Burrito",
+        "ProductType": "burrito",
+        "Available Amount": 70,
+        "Price": 4.5
+      }
+    ]
+  },
+  {
+    "StoreName": "SeaFoodExpress",
+    "Latitude": 37.997654,
+    "Longitude": 23.728765,
+    "FoodCategory": "seafood",
+    "Stars": 5,
+    "NoOfVotes": 48,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Fried Calamari",
+        "ProductType": "seafood",
+        "Available Amount": 80,
+        "Price": 7.5
+      },
+      {
+        "ProductName": "Grilled Salmon",
+        "ProductType": "seafood",
+        "Available Amount": 60,
+        "Price": 9.0
+      },
+      {
+        "ProductName": "Shrimp Pasta",
+        "ProductType": "seafood",
+        "Available Amount": 40,
+        "Price": 8.5
+      }
+    ]
+  },
+  {
+    "StoreName": "VeganGarden",
+    "Latitude": 37.988888,
+    "Longitude": 23.744444,
+    "FoodCategory": "vegan",
+    "Stars": 4,
+    "NoOfVotes": 25,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Vegan Burger",
+        "ProductType": "burger",
+        "Available Amount": 90,
+        "Price": 6.5
+      },
+      {
+        "ProductName": "Salad Bowl",
+        "ProductType": "salad",
+        "Available Amount": 70,
+        "Price": 5.0
+      }
+    ]
+  },
+  {
+    "StoreName": "SweetTooth",
+    "Latitude": 37.996543,
+    "Longitude": 23.739876,
+    "FoodCategory": "desserts",
+    "Stars": 3,
+    "NoOfVotes": 9,
+    "StoreLogo": "",
+    "Products": [
+      {
+        "ProductName": "Chocolate Cake",
+        "ProductType": "dessert",
+        "Available Amount": 20,
+        "Price": 4.5
+      },
+      {
+        "ProductName": "Ice Cream Scoop",
+        "ProductType": "dessert",
+        "Available Amount": 100,
+        "Price": 2.5
+      }
+    ]
+  }
+]
