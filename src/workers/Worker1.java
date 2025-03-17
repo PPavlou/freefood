@@ -9,7 +9,7 @@ import java.net.Socket;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-
+import com.google.gson.Gson;
 import model.Store;
 import model.Product;
 
@@ -169,57 +169,26 @@ public class Worker1 {
 
     /**
      * Parses a JSON string representing a store and returns a Store object.
-     * <p>
-     * Note: This is a dummy implementation for demonstration purposes.
-     * In a real system, you would use a JSON parsing library such as Gson or Jackson.
-     * </p>
+     * This method now uses Gson for proper parsing.
      *
      * @param jsonData The JSON string representing the store.
      * @return A Store object created from the provided JSON data.
      */
     private Store parseStore(String jsonData) {
-        // Dummy parser: extract store name if available.
-        String storeName = "UnknownStore";
-        if (jsonData.contains("StoreName")) {
-            int start = jsonData.indexOf("StoreName") + "StoreName".length() + 1;
-            storeName = jsonData.substring(start).trim();
-        }
-        // Create and return a Store with dummy default values.
-        Store store = new Store();
-        store.setStoreName(storeName);
-        store.setLatitude(0.0);
-        store.setLongitude(0.0);
-        store.setFoodCategory("unknown");
-        store.setStars(0);
-        store.setNoOfVotes(0);
-        store.setStoreLogo("");
-        return store;
+        Gson gson = new Gson();
+        return gson.fromJson(jsonData, Store.class);
     }
 
     /**
      * Parses a JSON string representing a product and returns a Product object.
-     * <p>
-     * Note: This is a dummy implementation for demonstration purposes.
-     * In a real system, you would use a JSON parsing library such as Gson or Jackson.
-     * </p>
+     * This method now uses Gson for proper parsing.
      *
      * @param jsonData The JSON string representing the product.
      * @return A Product object created from the provided JSON data.
      */
     private Product parseProduct(String jsonData) {
-        // Dummy parser: extract product name if available.
-        String productName = "UnknownProduct";
-        if (jsonData.contains("ProductName")) {
-            int start = jsonData.indexOf("ProductName") + "ProductName".length() + 1;
-            productName = jsonData.substring(start).trim();
-        }
-        // Create and return a Product with dummy default values.
-        Product product = new Product();
-        product.setProductName(productName);
-        product.setProductType("unknown");
-        product.setAvailableAmount(0);
-        product.setPrice(0.0);
-        return product;
+        Gson gson = new Gson();
+        return gson.fromJson(jsonData, Product.class);
     }
 
     /**

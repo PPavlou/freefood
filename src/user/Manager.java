@@ -92,7 +92,7 @@ public class Manager {
      * @param args command-line arguments.
      */
     public static void main(String[] args) {
-        // Create a Manager instance connecting to the Master server on localhost:5000
+        // Create a Manager instance connecting to the Master server on localhost:12345
         Manager manager = new Manager("localhost", 12345);
 
         // Example JSON for a store
@@ -112,4 +112,3 @@ public class Manager {
         System.out.println("Remove Product Response: " + response);
     }
 }
-

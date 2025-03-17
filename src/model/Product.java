@@ -1,5 +1,7 @@
 package model;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
  * Represents a product available in a store.
  * Contains details such as name, type, available stock, and price.
@@ -7,6 +9,8 @@ package model;
 public class Product {
     private String productName;
     private String productType;
+
+    @SerializedName("Available Amount")
     private int availableAmount;
     private double price;
 
