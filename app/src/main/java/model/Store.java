@@ -15,6 +15,8 @@ public class Store {
     private int stars;
     private int noOfVotes;
     private double totalRevenue = 0.0;
+    private double averagePrice;
+    private String averagePriceSymbol;
     private String storeLogo;
     private List<Product> products;
 
@@ -42,6 +44,8 @@ public class Store {
         this.totalRevenue = totalRevenue;
         this.storeLogo = storeLogo;
         this.products = products;
+        this.setAveragePriceOfStore();
+        this.setAveragePriceOfStoreSymbol();
     }
 
     /**
@@ -214,6 +218,65 @@ public class Store {
         this.products = products;
     }
 
+
+    /**
+     * gets the symbol of the store e.g. averagePrice>15 -> $$$
+     *
+     *
+     */
+    public String getAveragePriceOfStoreSymbol(){
+        return averagePriceSymbol;
+    }
+
+    /**
+     * Sets the symbol of the store e.g. averagePrice>15 -> $$$
+     *
+     *
+     */
+    public void setAveragePriceOfStoreSymbol()
+    {
+        if (products.isEmpty())
+        {
+            averagePriceSymbol = "Not any products in the store";
+        }
+
+        if (averagePrice<5.0){
+            averagePriceSymbol = "$";
+        }
+        if (averagePrice<15.0){
+            averagePriceSymbol = "$$";
+        }
+        averagePriceSymbol = "$$$";
+    }
+
+    /**
+     * gets the average Price of the Store
+     *
+     *
+     */
+    public double getAveragePriceOfStore(){
+        return averagePrice;
+    }
+    /**
+     * Sets the average Price of the Store
+     *
+     *
+     */
+    public void setAveragePriceOfStore()
+    {
+        double sum = 0.0f;
+
+        if (products.isEmpty())
+        {
+            averagePrice = 0.0;
+        }
+
+        for (Product product : products)
+        {
+            sum += product.getPrice();
+        }
+        averagePrice = sum / products.size();
+    }
     /**
      * Purchases a product from the store.
      *
