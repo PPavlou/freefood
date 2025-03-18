@@ -14,12 +14,15 @@ import model.Store;
 import model.Product;
 
 /**
- * The Worker class represents a worker node in a distributed online food delivery system.
+ * The Worker1 class represents a worker node in a distributed online food delivery system.
  * A Worker listens for TCP requests from the Master server and processes commands such as:
  * <ul>
  *   <li>ADD_STORE - Adds a new store to the worker's memory.</li>
+ *   <li>REMOVE_STORE - Removes a store from the worker's memory.</li>
  *   <li>ADD_PRODUCT - Adds a product to an existing store.</li>
  *   <li>REMOVE_PRODUCT - Removes a product from an existing store.</li>
+ *   <li>PURCHASE_PRODUCT - Processes a purchase request.</li>
+ *   <li>LIST_STORES - Returns a comma-separated list of store names.</li>
  * </ul>
  *
  * Workers are designed to be multithreaded, so that they can handle multiple requests concurrently.
@@ -32,7 +35,7 @@ public class Worker1 {
     private Map<String, Store> stores;
 
     /**
-     * Constructs a Worker instance that will listen on the specified port.
+     * Constructs a Worker1 instance that will listen on the specified port.
      *
      * @param port The port number on which the Worker will listen for incoming TCP connections.
      */
@@ -59,8 +62,6 @@ public class Worker1 {
 
     /**
      * The ClientHandler class processes a single request from the Master server.
-     * It reads the command and associated data from the TCP socket, processes the request,
-     * and sends back a response.
      */
     private class ClientHandler implements Runnable {
         private Socket socket;
@@ -106,11 +107,15 @@ public class Worker1 {
 
     /**
      * Processes the command received from the Master server.
-     * Supported commands are:
+     *
+     * Supported commands:
      * <ul>
      *   <li>ADD_STORE - expects a JSON string representing a store.</li>
+     *   <li>REMOVE_STORE - expects the store name as a string.</li>
+     *   <li>PURCHASE_PRODUCT - expects data in the format "storeName|productName|quantity".</li>
      *   <li>ADD_PRODUCT - expects data in the format "storeName|productJson".</li>
      *   <li>REMOVE_PRODUCT - expects data in the format "storeName|productName".</li>
+     *   <li>LIST_STORES - no additional data; returns a comma-separated list of store names.</li>
      * </ul>
      *
      * @param command The command to execute.
@@ -124,6 +129,16 @@ public class Worker1 {
                 stores.put(store.getStoreName(), store);
             }
             return "Store " + store.getStoreName() + " added successfully.";
+        } else if (command.equals("REMOVE_STORE")) {
+            String storeName = data.trim();
+            synchronized (stores) {
+                if (stores.containsKey(storeName)) {
+                    stores.remove(storeName);
+                    return "Store " + storeName + " removed successfully.";
+                } else {
+                    return "Store " + storeName + " not found.";
+                }
+            }
         } else if (command.equals("PURCHASE_PRODUCT")) {
             // Expected data format: "storeName|productName|quantity"
             String[] parts = data.split("\\|");
@@ -190,13 +205,27 @@ public class Worker1 {
                     return "Store " + storeName + " not found.";
                 }
             }
+        } else if (command.equals("LIST_STORES")) {
+            synchronized (stores) {
+                if (stores.isEmpty()) {
+                    return "No stores available.";
+                }
+                StringBuilder sb = new StringBuilder();
+                for (String name : stores.keySet()) {
+                    sb.append(name).append(", ");
+                }
+                if (sb.length() > 0) {
+                    sb.setLength(sb.length() - 2); // Remove trailing comma and space
+                }
+                return sb.toString();
+            }
         }
         return "Unknown command.";
     }
 
     /**
      * Parses a JSON string representing a store and returns a Store object.
-     * This method now uses Gson for proper parsing.
+     * Uses Gson for proper parsing.
      *
      * @param jsonData The JSON string representing the store.
      * @return A Store object created from the provided JSON data.
@@ -208,7 +237,7 @@ public class Worker1 {
 
     /**
      * Parses a JSON string representing a product and returns a Product object.
-     * This method now uses Gson for proper parsing.
+     * Uses Gson for proper parsing.
      *
      * @param jsonData The JSON string representing the product.
      * @return A Product object created from the provided JSON data.
@@ -219,7 +248,7 @@ public class Worker1 {
     }
 
     /**
-     * The main method to start the Worker node.
+     * Main method to start the Worker node.
      * The port number can be provided as a command-line argument.
      *
      * @param args Command-line arguments; the first argument is expected to be the port number.
