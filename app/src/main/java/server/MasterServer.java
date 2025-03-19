@@ -6,10 +6,10 @@ import java.net.Socket;
 
 /**
  * MasterServer sets up a TCP server that listens for incoming client connections.
- * For each connection, it spawns a new thread (ClientHandler) to handle communication.
+ * It forwards the commands received to a Worker node and returns the Worker's response.
  */
 public class MasterServer {
-    // Define the port number for the TCP server.
+    // Define the port number for the MasterServer.
     private static final int PORT = 12345;
 
     /**
@@ -25,7 +25,6 @@ public class MasterServer {
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("New client connected: " + clientSocket.getRemoteSocketAddress());
-
                 // Create and start a new thread to handle the connected client.
                 ClientHandler clientHandler = new ClientHandler(clientSocket);
                 new Thread(clientHandler).start();

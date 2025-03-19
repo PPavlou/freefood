@@ -225,7 +225,8 @@ public class Manager {
      * @param args command-line arguments.
      */
     public static void main(String[] args) {
-        Manager manager = new Manager("localhost", 6000);
+        Manager manager = new Manager("localhost", 12345);
         interactiveMenu(manager);
     }
+
 }

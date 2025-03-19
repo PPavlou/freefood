@@ -2,58 +2,69 @@ package workers;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
 import com.google.gson.Gson;
 import model.Store;
-import model.Product;
 
-/**
- * The Worker1 class represents a worker node in a distributed online food delivery system.
- * A Worker listens for TCP requests from the Master server and processes commands such as:
- * <ul>
- *   <li>ADD_STORE - Adds a new store to the worker's memory.</li>
- *   <li>REMOVE_STORE - Removes a store from the worker's memory.</li>
- *   <li>ADD_PRODUCT - Adds a product to an existing store.</li>
- *   <li>REMOVE_PRODUCT - Removes a product from an existing store.</li>
- *   <li>PURCHASE_PRODUCT - Processes a purchase request.</li>
- *   <li>LIST_STORES - Returns a comma-separated list of store names.</li>
- * </ul>
- *
- * Workers are designed to be multithreaded, so that they can handle multiple requests concurrently.
- * The worker's store data is maintained in memory.
- */
 public class Worker1 {
 
     private int port;
-    // Stores assigned to this Worker, using the store name as key.
+    // Map of store name to Store objects.
     private Map<String, Store> stores;
 
-    /**
-     * Constructs a Worker1 instance that will listen on the specified port.
-     *
-     * @param port The port number on which the Worker will listen for incoming TCP connections.
-     */
     public Worker1(int port) {
         this.port = port;
         this.stores = Collections.synchronizedMap(new HashMap<>());
     }
 
     /**
-     * Starts the Worker server. The Worker continuously listens for incoming TCP connections
-     * on the specified port and spawns a new thread to handle each connection.
+     * Loads stores from the resource file "Stores.json" located in the "jsonf" package.
      */
+    public void loadStores() {
+        // Try loading the file using the class loader (without a leading slash)
+        InputStream is = Worker1.class.getResourceAsStream("/jsonf/Stores.json");
+        if (is == null) {
+            System.err.println("Resource not found: jsonf/Stores.json");
+            return;
+        }
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            String jsonContent = sb.toString();
+            Gson gson = new Gson();
+            List<Store> storeList = gson.fromJson(jsonContent, new com.google.gson.reflect.TypeToken<List<Store>>(){}.getType());
+            synchronized (stores) {
+                for (Store s : storeList) {
+                    stores.put(s.getStoreName(), s);
+                }
+            }
+            System.out.println("Loaded " + storeList.size() + " stores from resource: jsonf/Stores.json");
+        } catch (IOException e) {
+            System.err.println("Error loading stores from resource: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
     public void start() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Worker started on port " + port);
             while (true) {
                 Socket socket = serverSocket.accept();
-                new Thread(new ClientHandler(socket)).start();
+                // Use the external WorkerClientHandler class (imported from package workers)
+                WorkerClientHandler handler = new WorkerClientHandler(socket, this);
+                new Thread(handler).start();
             }
         } catch (IOException e) {
             System.err.println("Error starting Worker: " + e.getMessage());
@@ -61,70 +72,13 @@ public class Worker1 {
     }
 
     /**
-     * The ClientHandler class processes a single request from the Master server.
+     * Processes a command and returns a response.
+     * This method is used by WorkerClientHandler.
      */
-    private class ClientHandler implements Runnable {
-        private Socket socket;
-
-        /**
-         * Constructs a ClientHandler for a given client socket.
-         *
-         * @param socket The client socket connected to this Worker.
-         */
-        public ClientHandler(Socket socket) {
-            this.socket = socket;
-        }
-
-        /**
-         * Processes the incoming TCP request, handling the command and sending a response back.
-         */
-        @Override
-        public void run() {
-            try (BufferedReader in = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream()));
-                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
-
-                // Read command and data from the Master server.
-                String command = in.readLine();
-                String data = in.readLine();
-                System.out.println("Received Command: " + command);
-                System.out.println("Data: " + data);
-
-                // Process the command.
-                String response = processCommand(command, data);
-                out.println(response);
-            } catch (IOException e) {
-                System.err.println("Error handling request: " + e.getMessage());
-            } finally {
-                try {
-                    socket.close();
-                } catch (IOException e) {
-                    // Ignore exception during socket close.
-                }
-            }
-        }
-    }
-
-    /**
-     * Processes the command received from the Master server.
-     *
-     * Supported commands:
-     * <ul>
-     *   <li>ADD_STORE - expects a JSON string representing a store.</li>
-     *   <li>REMOVE_STORE - expects the store name as a string.</li>
-     *   <li>PURCHASE_PRODUCT - expects data in the format "storeName|productName|quantity".</li>
-     *   <li>ADD_PRODUCT - expects data in the format "storeName|productJson".</li>
-     *   <li>REMOVE_PRODUCT - expects data in the format "storeName|productName".</li>
-     *   <li>LIST_STORES - no additional data; returns a comma-separated list of store names.</li>
-     * </ul>
-     *
-     * @param command The command to execute.
-     * @param data The associated data in String format.
-     * @return A response message indicating the result of the operation.
-     */
-    private String processCommand(String command, String data) {
+    public String processCommand(String command, String data) {
+        Gson gson = new Gson();
         if (command.equals("ADD_STORE")) {
-            Store store = parseStore(data);
+            Store store = gson.fromJson(data, Store.class);
             synchronized (stores) {
                 stores.put(store.getStoreName(), store);
             }
@@ -174,7 +128,7 @@ public class Worker1 {
             }
             String storeName = parts[0];
             String productJson = parts[1];
-            Product product = parseProduct(productJson);
+            model.Product product = gson.fromJson(productJson, model.Product.class);
             synchronized (stores) {
                 Store store = stores.get(storeName);
                 if (store != null) {
@@ -223,46 +177,10 @@ public class Worker1 {
         return "Unknown command.";
     }
 
-    /**
-     * Parses a JSON string representing a store and returns a Store object.
-     * Uses Gson for proper parsing.
-     *
-     * @param jsonData The JSON string representing the store.
-     * @return A Store object created from the provided JSON data.
-     */
-    private Store parseStore(String jsonData) {
-        Gson gson = new Gson();
-        return gson.fromJson(jsonData, Store.class);
-    }
-
-    /**
-     * Parses a JSON string representing a product and returns a Product object.
-     * Uses Gson for proper parsing.
-     *
-     * @param jsonData The JSON string representing the product.
-     * @return A Product object created from the provided JSON data.
-     */
-    private Product parseProduct(String jsonData) {
-        Gson gson = new Gson();
-        return gson.fromJson(jsonData, Product.class);
-    }
-
-    /**
-     * Main method to start the Worker node.
-     * The port number can be provided as a command-line argument.
-     *
-     * @param args Command-line arguments; the first argument is expected to be the port number.
-     */
     public static void main(String[] args) {
         int port = 6000; // Default port.
-        if (args.length > 0) {
-            try {
-                port = Integer.parseInt(args[0]);
-            } catch (NumberFormatException e) {
-                System.err.println("Invalid port number, using default port 6000.");
-            }
-        }
         Worker1 worker = new Worker1(port);
+        worker.loadStores();  // Loads stores from the resource file "Stores.json" in package "jsonf"
         worker.start();
     }
 }
