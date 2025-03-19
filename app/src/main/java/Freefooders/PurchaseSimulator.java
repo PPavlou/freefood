@@ -1,4 +1,4 @@
-package user;
+package Freefooders;
 
 import model.Store;
 import model.Product;

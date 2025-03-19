@@ -7,20 +7,25 @@ import com.google.gson.annotations.SerializedName;
  * Contains details such as name, type, available stock, and price.
  */
 public class Product {
+    @SerializedName("ProductName")
     private String productName;
+
+    @SerializedName("ProductType")
     private String productType;
 
     @SerializedName("Available Amount")
     private int availableAmount;
+
+    @SerializedName("Price")
     private double price;
 
     /**
      * Constructs a Product with specified details.
      *
-     * @param productName   The name of the product.
-     * @param productType   The type/category of the product.
+     * @param productName     The name of the product.
+     * @param productType     The type/category of the product.
      * @param availableAmount The available stock quantity of the product.
-     * @param price         The price of the product.
+     * @param price           The price of the product.
      */
     public Product(String productName, String productType, int availableAmount, double price) {
         this.productName = productName;
@@ -121,4 +126,3 @@ public class Product {
                 '}';
     }
 }
-
