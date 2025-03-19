@@ -13,36 +13,33 @@ import Worker.WorkerInfo;
 public class ClientHandler implements Runnable {
     private Socket clientSocket;
     private List<WorkerInfo> workerList;
+    private Socket workerSocket;
+    private BufferedReader initialReader;
+    private String firstLine;
 
-    public ClientHandler(Socket clientSocket, List<WorkerInfo> workerList) {
+    public ClientHandler(Socket clientSocket, Socket workerSocket, String firstLine, BufferedReader initialReader) {
         this.clientSocket = clientSocket;
-        this.workerList = workerList;
+        this.workerSocket = workerSocket;
+        this.firstLine = firstLine;
+        this.initialReader = initialReader;
     }
 
     @Override
     public void run() {
         try (
-                InputStream inStream = clientSocket.getInputStream();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(inStream));
+                // Use the already available initialReader for the manager connection.
+                BufferedReader reader = initialReader;
                 OutputStream outStream = clientSocket.getOutputStream();
                 PrintWriter writer = new PrintWriter(outStream, true)
         ) {
-            // Read command and data from the client
-            String command = reader.readLine();
+            // Use the firstLine as the command
+            String command = firstLine;
             String data = reader.readLine();
             System.out.println("Master received command: " + command);
             System.out.println("Master received data: " + data);
 
-            // Choose a worker based on the command and data.
-            // For commands that include a store name, extract it to compute the hash.
-            WorkerInfo chosenWorker = chooseWorker(command, data);
-            if (chosenWorker == null) {
-                writer.println("No worker available.");
-                return;
-            }
-
-            // Forward the command and data to the chosen worker
-            String response = forwardToWorker(chosenWorker, command, data);
+            // Forward the command using the persistent worker connection.
+            String response = forwardToWorker(command, data);
             writer.println(response);
         } catch (IOException e) {
             System.err.println("ClientHandler error: " + e.getMessage());
@@ -95,17 +92,19 @@ public class ClientHandler implements Runnable {
         return null;
     }
 
-    private String forwardToWorker(WorkerInfo worker, String command, String data) {
+    private String forwardToWorker(String command, String data) {
+        if (workerSocket == null) {
+            return "No worker available.";
+        }
         String response = "";
-        try (Socket workerSocket = new Socket(worker.getHost(), worker.getPort());
-             PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(new InputStreamReader(workerSocket.getInputStream()))
-        ) {
+        try {
+            PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(workerSocket.getInputStream()));
             out.println(command);
             out.println(data);
             response = in.readLine();
         } catch (IOException e) {
-            response = "Error connecting to worker: " + e.getMessage();
+            response = "Error communicating with worker: " + e.getMessage();
             System.err.println(response);
         }
         return response;

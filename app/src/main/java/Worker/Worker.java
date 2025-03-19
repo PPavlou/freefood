@@ -7,10 +7,7 @@ import Manager.ProductManager;
 import model.Store;
 import model.Product;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
@@ -30,7 +27,7 @@ public class Worker {
 
     // Default constructor using port 6000.
     public Worker() {
-        this(6000);
+        this(12345);
     }
 
     /**
@@ -67,18 +64,47 @@ public class Worker {
      * Starts the Worker server to accept connections from the Master.
      */
     public void start() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Worker started on port " + port);
+        try {
+            // Connect to the master server on the shared port.
+            Socket socket = new Socket("localhost", port);
+            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            // Send a handshake to identify as a worker.
+            writer.println("WORKER_HANDSHAKE");
+            System.out.println("Worker connected to master on port " + port + " as WORKER");
+
+            // Loop indefinitely to receive commands from the master.
             while (true) {
-                Socket socket = serverSocket.accept();
-                WorkerMasterHandler handler = new WorkerMasterHandler(socket, this);
-                new Thread(handler).start();
+                String command = reader.readLine();
+                if (command == null) {
+                    System.out.println("Master closed the connection.");
+                    break;
+                }
+                String data = reader.readLine();
+                if (data == null) {
+                    System.out.println("Master closed the connection.");
+                    break;
+                }
+                System.out.println("Worker received command: " + command);
+                System.out.println("Worker received data: " + data);
+
+                // Process the command.
+                String response = processCommand(command, data);
+
+                // Send the response back.
+                writer.println(response);
             }
+            socket.close();
         } catch (IOException e) {
-            System.err.println("Error starting Worker: " + e.getMessage());
+            System.err.println("Error in persistent worker connection: " + e.getMessage());
             e.printStackTrace();
         }
     }
+
+
+
+
 
     /**
      * Processes a command received from the Master and returns an appropriate response.
@@ -228,7 +254,7 @@ public class Worker {
     }
 
     public static void main(String[] args) {
-        Worker worker = new Worker(6000);
+        Worker worker = new Worker(12345);
         worker.loadStores();
         worker.start();
     }
