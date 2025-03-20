@@ -112,7 +112,30 @@ public class Worker {
      */
     public String processCommand(String command, String data) {
         Gson gson = new Gson();
-        if (command.equals("ADD_STORE")) {
+        if (command.equals("SEARCH")) {
+            // Expect data in the format "FoodCategory=pizzeria"
+            String[] parts = data.split("=");
+            if (parts.length != 2) {
+                return "Invalid search query format. Expected key=value.";
+            }
+            String key = parts[0].trim();
+            String value = parts[1].trim();
+            if (key.equalsIgnoreCase("FoodCategory")) {
+                StringBuilder result = new StringBuilder();
+                // Iterate through all stores and collect those matching the food category.
+                for (Store store : storeManager.getAllStores().values()) {
+                    if (store.getFoodCategory().equalsIgnoreCase(value)) {
+                        result.append(store.toString()).append("\n");
+                    }
+                }
+                if (result.length() == 0) {
+                    return "No stores found for category: " + value;
+                }
+                return result.toString();
+            } else {
+                return "Search key not supported.";
+            }
+        } else if (command.equals("ADD_STORE")) {
             Store store = gson.fromJson(data, Store.class);
             return storeManager.addStore(store);
         } else if (command.equals("REMOVE_STORE")) {
