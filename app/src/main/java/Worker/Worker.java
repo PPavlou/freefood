@@ -51,6 +51,8 @@ public class Worker {
             Gson gson = new Gson();
             List<Store> storeList = gson.fromJson(jsonContent, new TypeToken<List<Store>>(){}.getType());
             for (Store s : storeList) {
+                s.setAveragePriceOfStore();
+                s.setAveragePriceOfStoreSymbol();
                 storeManager.addStore(s);
             }
             System.out.println("Loaded " + storeList.size() + " stores from resource: /jsonf/Stores.json");
@@ -181,6 +183,7 @@ public class Worker {
             } else {
                 return "Store " + storeName + " not found.";
             }
+
         } else if (command.equals("REMOVE_PRODUCT")) {
             // Data format: "storeName|productName"
             String[] parts = data.split("\\|", 2);
@@ -272,6 +275,17 @@ public class Worker {
             return productManager.getDeletedProductsReport();
         } else if (command.equals("LIST_STORES")) {
             return storeManager.getAllStores().keySet().toString();
+        }
+        else if (command.equals("REVIEW"))
+        {
+            String[] parts = data.split("\\|", 2);
+            String storeName=parts[0];
+            int review = Integer.parseInt(parts[1]);
+
+            Store store = storeManager.getStore(storeName);
+            store.updateStoreReviews(review);
+            String response = storeName + "Reviews Updated: Stars = " + store.getStars();
+            return response;
         }
         return "Unknown command.";
     }

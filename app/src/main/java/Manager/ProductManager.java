@@ -29,6 +29,7 @@ public class ProductManager {
      */
     public String addProduct(Store store, Product product) {
         store.addProduct(product);
+        store.updateStorePrices();
         return "Product " + product.getProductName() + " added to store " + store.getStoreName() + ".";
     }
 
@@ -44,6 +45,7 @@ public class ProductManager {
         boolean removed = store.removeProduct(productName);
         if (removed) {
             deletedProducts.add(productName);
+            store.updateStorePrices();
             return "Product " + productName + " removed from store " + store.getStoreName() + ".";
         } else {
             return "Product " + productName + " not found in store " + store.getStoreName() + ".";

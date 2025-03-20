@@ -103,6 +103,8 @@ public class Manager {
                     store.setNoOfVotes(noOfVotes);
                     store.setStoreLogo(logoPath);
                     store.setProducts(products);
+                    store.setAveragePriceOfStore();
+                    store.setAveragePriceOfStoreSymbol();
 
                     String storeJson = gson.toJson(store);
                     System.out.println("Sending ADD_STORE command...");

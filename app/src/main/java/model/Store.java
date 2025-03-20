@@ -30,6 +30,8 @@ public class Store {
     // These fields are calculated or maintained internally.
     private double totalRevenue = 0.0;
     private double averagePrice;
+
+    @SerializedName("AveragePriceSymbol")
     private String averagePriceSymbol;
 
     @SerializedName("StoreLogo")
@@ -335,6 +337,20 @@ public class Store {
         return false;
     }
 
+    public void updateStoreReviews(int review)
+    {
+        int reviewSum = this.stars*this.noOfVotes;
+        reviewSum += review;
+        this.stars = reviewSum / (noOfVotes+1);
+        this.noOfVotes += 1;
+    }
+
+    public void updateStorePrices()
+    {
+        setAveragePriceOfStore();
+        setAveragePriceOfStoreSymbol();
+    }
+
     /**
      * Returns a string representation of the Store object.
      *
@@ -350,7 +366,8 @@ public class Store {
                 ", stars=" + stars +
                 ", noOfVotes=" + noOfVotes +
                 ", storeLogo='" + storeLogo + '\'' +
-                ", products=" + products +
+                ", products=" + products + '\''+
+                ", AveragePrices=" + averagePriceSymbol +
                 '}';
     }
 }

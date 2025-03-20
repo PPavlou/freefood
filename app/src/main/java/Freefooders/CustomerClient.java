@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.InputMismatchException;
 import java.util.Scanner;
 
 public class CustomerClient {
@@ -77,6 +78,12 @@ public class CustomerClient {
                     String quantity = scanner.nextLine();
                     String purchaseResponse = sendCommand("PURCHASE_PRODUCT", storeName + "|" + productName + "|" + quantity);
                     System.out.println("Purchase Response: " + purchaseResponse);
+                    if(purchaseResponse.contains("Successfully"))
+                    {
+                        int review = getReviewFromClient();
+                        String reviewResponse = sendCommand("REVIEW", storeName + "|" + Integer.toString(review));
+                        System.out.println("Review Response: " + reviewResponse);
+                    }
                     break;
                 case 3:
                     System.out.println("Exiting Customer Console.");
@@ -88,6 +95,27 @@ public class CustomerClient {
         }
     }
 
+    public static int getReviewFromClient()
+    {
+        Scanner scanner = new Scanner(System.in);
+        int review = 0;
+        boolean validInput = false;
+        System.out.print("Leave a Review (1-5): ");
+        while (!validInput) {
+            try {
+                review = scanner.nextInt();
+                if (review < 1 || review > 5) {
+                    System.out.print("Review must have values between 1 and 5: ");
+                } else {
+                    validInput = true;
+                }
+            } catch (InputMismatchException e) {
+                System.out.print("Please enter a valid integer: ");
+                scanner.next(); // Consume the invalid input
+            }
+        }
+        return  review;
+    }
     public static void main(String[] args) {
         interactiveMenu();
     }
