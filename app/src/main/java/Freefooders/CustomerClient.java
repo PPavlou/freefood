@@ -1,11 +1,6 @@
 package Freefooders;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.util.InputMismatchException;
 import java.util.Scanner;
@@ -52,8 +47,10 @@ public class CustomerClient {
             System.out.println("=== Customer Console ===");
             System.out.println("Select an option:");
             System.out.println("1. Search Stores by Food Category");
-            System.out.println("2. Purchase Product");
-            System.out.println("3. Exit");
+            System.out.println("2. Search Stores by StarCategory");
+            System.out.println("3. Search Stores by AvgPrice");
+            System.out.println("4. Purchase Product");
+            System.out.println("5. Exit");
             System.out.print("Choice: ");
             int choice;
             try {
@@ -70,6 +67,18 @@ public class CustomerClient {
                     System.out.println("Search Response: " + searchResponse);
                     break;
                 case 2:
+                    String messageForStars = "Star";
+                    int stars = getValidInteger(messageForStars,5);
+                    String searchStarsResponse = sendCommand("SEARCH", "Stars=" + stars);
+                    System.out.println("Search Response: " + searchStarsResponse);
+                    break;
+                case 3:
+                    String messageForAvgPrice = "AvgPrice";
+                    int avgPrice = getValidInteger(messageForAvgPrice,3);
+                    String searchAvgPriceResponse = sendCommand("SEARCH", "AvgPrice=" + avgPrice);
+                    System.out.println("\nSearch Response: " + searchAvgPriceResponse);
+                    break;
+                case 4:
                     System.out.print("Enter Store Name: ");
                     String storeName = scanner.nextLine();
                     System.out.print("Enter Product Name: ");
@@ -80,12 +89,13 @@ public class CustomerClient {
                     System.out.println("Purchase Response: " + purchaseResponse);
                     if(purchaseResponse.contains("Successfully"))
                     {
-                        int review = getReviewFromClient();
+                        String messageForReview = "Review";
+                        int review = getValidInteger(messageForReview,5);
                         String reviewResponse = sendCommand("REVIEW", storeName + "|" + Integer.toString(review));
                         System.out.println("Review Response: " + reviewResponse);
                     }
                     break;
-                case 3:
+                case 5:
                     System.out.println("Exiting Customer Console.");
                     scanner.close();
                     return;
@@ -95,17 +105,17 @@ public class CustomerClient {
         }
     }
 
-    public static int getReviewFromClient()
+    public static int getValidInteger(String message,int range)
     {
         Scanner scanner = new Scanner(System.in);
         int review = 0;
         boolean validInput = false;
-        System.out.print("Leave a Review (1-5): ");
+        System.out.print("Select a " + message +  " (1-" + range + "): ");
         while (!validInput) {
             try {
                 review = scanner.nextInt();
-                if (review < 1 || review > 5) {
-                    System.out.print("Review must have values between 1 and 5: ");
+                if (review < 1 || review > range) {
+                    System.out.print(message + " must have values between 1 and " + range + ": ");
                 } else {
                     validInput = true;
                 }

@@ -122,16 +122,33 @@ public class Worker {
             }
             String key = parts[0].trim();
             String value = parts[1].trim();
-            if (key.equalsIgnoreCase("FoodCategory")) {
+
+            if (key.equalsIgnoreCase("FoodCategory") ||
+                    key.equalsIgnoreCase("Stars") ||
+                    key.equalsIgnoreCase("AvgPrice")){
                 StringBuilder result = new StringBuilder();
-                // Iterate through all stores and collect those matching the food category.
                 for (Store store : storeManager.getAllStores().values()) {
-                    if (store.getFoodCategory().equalsIgnoreCase(value)) {
-                        result.append(store.toString()).append("\n");
+                    switch (key) {
+                        case "FoodCategory":
+                            if (store.getFoodCategory().equalsIgnoreCase(value)) {
+                                result.append(store.toString()).append("\n");
+                            }
+                            break;
+                        case "Stars":
+                            if (Integer.toString(store.getStars()).equals(value)) {
+                                result.append(store.toString()).append("\n");
+                            }
+                            break;
+                        case "AvgPrice":
+                            if (store.getAveragePriceOfStoreSymbol().equals("$".repeat(Integer.parseInt(value))))
+                            {
+                                result.append(store.toString()).append("\n");
+                            }
+                            break;
                     }
                 }
                 if (result.length() == 0) {
-                    return "No stores found for category: " + value;
+                    return "No stores found for "+ key +": " + value;
                 }
                 return result.toString();
             } else {
