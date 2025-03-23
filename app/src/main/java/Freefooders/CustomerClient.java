@@ -7,9 +7,29 @@ import java.util.Scanner;
 
 public class CustomerClient {
     // The host and port where the MasterServer is running.
-    private static final String SERVER_HOST = "localhost";
-    private static final int SERVER_PORT = 12345;
+    private String SERVER_HOST;
+    private int SERVER_PORT;
+    private double latitude;
+    private double longitude;
+    private int radius;
 
+    public CustomerClient(String server_host,int server_port,double latitude,double longitude)
+    {
+        this.SERVER_HOST  = server_host;
+        this.SERVER_PORT = server_port;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.radius = 5;//default value
+    }
+
+    public CustomerClient(String server_host,int server_port,double latitude,double longitude,int radius)
+    {
+        this.SERVER_HOST  = server_host;
+        this.SERVER_PORT = server_port;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.radius = radius;
+    }
     /**
      * Sends a command along with its data to the Master server.
      *
@@ -17,7 +37,7 @@ public class CustomerClient {
      * @param data the associated data as a String.
      * @return the response from the Master server.
      */
-    private static String sendCommand(String command, String data) {
+    private String sendCommand(String command, String data) {
         String response = "";
         try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
              OutputStream output = socket.getOutputStream();
@@ -39,9 +59,63 @@ public class CustomerClient {
     }
 
     /**
+     * Gets the latitude of the client.
+     *
+     * @return The latitude.
+     */
+    public double getLatitude() {
+        return latitude;
+    }
+
+    /**
+     * Sets the latitude of the client.
+     *
+     * @param latitude The new latitude.
+     */
+    public void setLatitude(double latitude) {
+        this.latitude = latitude;
+    }
+
+    /**
+     * Gets the longitude of the client.
+     *
+     * @return The longitude.
+     */
+    public double getLongitude() {
+        return this.longitude;
+    }
+
+    /**
+     * Sets the longitude of the client.
+     *
+     * @param longitude The new longitude.
+     */
+    public void setLongitude(double longitude) {
+        this.longitude = longitude;
+    }
+
+    /**
+     * Gets the radius of the client.
+     *
+     * @return The radius.
+     */
+    public int getRadius() {
+        return this.radius;
+    }
+
+    /**
+     * Sets the radius of the client.
+     *
+     * @param radius The new longitude.
+     */
+    public void setRadius(int radius) {
+        this.radius = radius;
+    }
+
+    /**
      * Provides an interactive console for customer operations.
      */
-    public static void interactiveMenu() {
+    public void interactiveMenu() {
         Scanner scanner = new Scanner(System.in);
         while (true) {
             System.out.println("=== Customer Console ===");
@@ -49,8 +123,9 @@ public class CustomerClient {
             System.out.println("1. Search Stores by Food Category");
             System.out.println("2. Search Stores by StarCategory");
             System.out.println("3. Search Stores by AvgPrice");
-            System.out.println("4. Purchase Product");
-            System.out.println("5. Exit");
+            System.out.println("4. Search Stores in "+this.getRadius()+"km radius");
+            System.out.println("5. Purchase Product");
+            System.out.println("6. Exit");
             System.out.print("Choice: ");
             int choice;
             try {
@@ -79,6 +154,11 @@ public class CustomerClient {
                     System.out.println("\nSearch Response: " + searchAvgPriceResponse);
                     break;
                 case 4:
+                    String messageForRadiusFilter = getRadius() + "," +getLongitude()+ "," +getLatitude();
+                    String searchRadiusResponse = sendCommand("SEARCH", "Radius=" + messageForRadiusFilter);
+                    System.out.println("\nSearch Response: " + searchRadiusResponse);
+                    break;
+                case 5:
                     System.out.print("Enter Store Name: ");
                     String storeName = scanner.nextLine();
                     System.out.print("Enter Product Name: ");
@@ -95,7 +175,7 @@ public class CustomerClient {
                         System.out.println("Review Response: " + reviewResponse);
                     }
                     break;
-                case 5:
+                case 6:
                     System.out.println("Exiting Customer Console.");
                     scanner.close();
                     return;
@@ -105,7 +185,7 @@ public class CustomerClient {
         }
     }
 
-    public static int getValidInteger(String message,int range)
+    public int getValidInteger(String message,int range)
     {
         Scanner scanner = new Scanner(System.in);
         int review = 0;
@@ -127,6 +207,7 @@ public class CustomerClient {
         return  review;
     }
     public static void main(String[] args) {
-        interactiveMenu();
+        CustomerClient customerClient = new CustomerClient("localhost", 12345,37.994124,23.732089);
+        customerClient.interactiveMenu();
     }
 }

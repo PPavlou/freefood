@@ -125,7 +125,8 @@ public class Worker {
 
             if (key.equalsIgnoreCase("FoodCategory") ||
                     key.equalsIgnoreCase("Stars") ||
-                    key.equalsIgnoreCase("AvgPrice")){
+                    key.equalsIgnoreCase("AvgPrice") ||
+                    key.equalsIgnoreCase("Radius")){
                 StringBuilder result = new StringBuilder();
                 for (Store store : storeManager.getAllStores().values()) {
                     switch (key) {
@@ -141,6 +142,22 @@ public class Worker {
                             break;
                         case "AvgPrice":
                             if (store.getAveragePriceOfStoreSymbol().equals("$".repeat(Integer.parseInt(value))))
+                            {
+                                result.append(store.toString()).append("\n");
+                            }
+                            break;
+                        case "Radius":
+                            double storeLongitude = store.getLongitude();
+                            double storeLatitude = store.getLatitude();
+                            String[] partsRadius = parts[1].split(",");
+                            if (partsRadius.length != 3) {
+                                System.out.println(parts[1]);
+                                return "Invalid search query format. Expected radius,longtitude,latitude.";
+                            }
+                            int radius = Integer.parseInt(partsRadius[0]);
+                            double clientLongitude = Double.parseDouble(partsRadius[1]);
+                            double clientLatitude = Double.parseDouble(partsRadius[2]);
+                            if (calculateDistanceBetween2Points(storeLongitude,storeLatitude,clientLongitude,clientLatitude) <= radius)
                             {
                                 result.append(store.toString()).append("\n");
                             }
@@ -305,6 +322,25 @@ public class Worker {
             return response;
         }
         return "Unknown command.";
+    }
+
+    private double calculateDistanceBetween2Points(double longitude1,double latitude1,double longitude2,double latitude2)
+    {
+        var R = 6371; // Radius of the earth in km
+        double dLat = deg2rad(latitude2-latitude1);
+        double dLon = deg2rad(longitude2-longitude1);
+        double a =
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(deg2rad(latitude1)) * Math.cos(deg2rad(latitude2)) *
+                                Math.sin(dLon/2) * Math.sin(dLon/2)
+                ;
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        double d = R * c; // Distance in km
+        return d;
+    }
+
+    private double deg2rad(double deg) {
+        return deg * (Math.PI/180);
     }
 
     public static void main(String[] args) {
