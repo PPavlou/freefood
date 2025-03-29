@@ -52,8 +52,7 @@ public class Manager {
             System.out.println("7. Show Deleted Products Report");
             System.out.println("8. List Stores");
             System.out.println("9. Exit");
-            System.out.println("10. Aggregate Sales by Store");
-            System.out.println("11. Aggregate Sales by Product Category");
+            System.out.println("10. Show Sales by Product");
             System.out.print("Choice: ");
             int choice;
             try {
@@ -183,15 +182,9 @@ public class Manager {
                     scanner.close();
                     return;
                 case 10:
-                    System.out.print("Enter Food Category for aggregation (e.g., pizzeria): ");
-                    String aggFoodCategory = scanner.nextLine();
-                    String aggStoreResponse = sendCommand("AGGREGATE_SALES_BY_STORE", "FoodCategory=" + aggFoodCategory);
-                    System.out.println("Aggregation Response:\n" + aggStoreResponse);
-                    break;
-                case 11:
-                    System.out.print("Enter Product Category for aggregation (e.g., salad): ");
-                    String aggProductCategory = scanner.nextLine();
-                    String aggProductResponse = sendCommand("AGGREGATE_SALES_BY_PRODUCT_CATEGORY", "ProductCategory=" + aggProductCategory);
+                    System.out.print("Enter Product Name for aggregation (e.g., Pepperoni): ");
+                    String aggProductName = scanner.nextLine();
+                    String aggProductResponse = sendCommand("AGGREGATE_SALES_BY_PRODUCT_NAME", "ProductName=" + aggProductName);
                     System.out.println("Aggregation Response:\n" + aggProductResponse);
                     break;
                 default:
