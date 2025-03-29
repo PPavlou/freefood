@@ -206,8 +206,5 @@ public class CustomerClient {
         }
         return  review;
     }
-    public static void main(String[] args) {
-        CustomerClient customerClient = new CustomerClient("localhost", 12345,37.994124,23.732089);
-        customerClient.interactiveMenu();
-    }
+
 }

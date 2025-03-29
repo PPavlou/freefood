@@ -18,42 +18,8 @@ public class Client {
     private static final String SERVER_HOST = "localhost";
     private static final int SERVER_PORT = 12345;
 
-    /**
-     * Sends a command and its associated data to the Master server.
-     *
-     * @param command the command type (e.g., "SEARCH", "PURCHASE_PRODUCT").
-     * @param data the associated data as a String.
-     * @return the response from the Master server.
-     */
-    private static String sendCommand(String command, String data) {
-        String response = "";
-        try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
-             OutputStream output = socket.getOutputStream();
-             PrintWriter writer = new PrintWriter(output, true);
-             InputStream input = socket.getInputStream();
-             BufferedReader reader = new BufferedReader(new InputStreamReader(input))) {
-
-            // Send command and data on separate lines.
-            writer.println(command);
-            writer.println(data);
-
-            // Read and return the response.
-            response = reader.readLine();
-        } catch (IOException e) {
-            System.err.println("Client exception: " + e.getMessage());
-            e.printStackTrace();
-        }
-        return response;
-    }
-
     public static void main(String[] args) {
-        // Simulate a search query on the customer side.
-        String searchResponse = sendCommand("SEARCH", "FoodCategory=pizzeria");
-        System.out.println("Search Response: " + searchResponse);
-
-        // Simulate a purchase (buy) request from the customer side.
-        // Data format: "storeName|productName|quantity"
-        String purchaseResponse = sendCommand("PURCHASE_PRODUCT", "PizzaWorld|Pepperoni|30");
-        System.out.println("Purchase Response: " + purchaseResponse);
+        CustomerClient customerClient = new CustomerClient(SERVER_HOST, SERVER_PORT,37.994124,23.732089);
+        customerClient.interactiveMenu();
     }
 }
