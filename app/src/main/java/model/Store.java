@@ -3,6 +3,8 @@ package model;
 import java.util.List;
 import java.util.ArrayList;
 import com.google.gson.annotations.SerializedName;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Represents a store that sells products.
@@ -39,6 +41,36 @@ public class Store {
 
     @SerializedName("Products")
     private List<Product> products;
+
+    @SerializedName("SalesRecord")
+    private Map<String, SalesRecordEntry> salesRecord = new HashMap<>();
+
+    public static class SalesRecordEntry {
+        private String productType;
+        private int quantity;
+
+        public SalesRecordEntry(String productType, int quantity) {
+            this.productType = productType;
+            this.quantity = quantity;
+        }
+
+        public String getProductType() {
+            return productType;
+        }
+
+        public int getQuantity() {
+            return quantity;
+        }
+
+        public void addQuantity(int q) {
+            this.quantity += q;
+        }
+    }
+
+    // Getter for the sales record
+    public Map<String, SalesRecordEntry> getSalesRecord() {
+        return salesRecord;
+    }
 
     /**
      * Constructs a Store with specified details.
@@ -303,6 +335,12 @@ public class Store {
                 if (product.getAvailableAmount() >= quantity) {
                     product.setAvailableAmount(product.getAvailableAmount() - quantity);
                     totalRevenue += quantity * product.getPrice();
+                    // Update sales record
+                    if (salesRecord.containsKey(productName)) {
+                        salesRecord.get(productName).addQuantity(quantity);
+                    } else {
+                        salesRecord.put(productName, new SalesRecordEntry(product.getProductType(), quantity));
+                    }
                     return true;
                 } else {
                     return false; // Not enough stock available.
@@ -311,6 +349,7 @@ public class Store {
         }
         return false; // Product not found.
     }
+
 
     /**
      * Adds a product to the store's inventory.

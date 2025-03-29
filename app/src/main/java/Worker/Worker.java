@@ -11,6 +11,7 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
+import java.util.Map;
 
 public class Worker {
     private int port;
@@ -253,7 +254,6 @@ public class Worker {
                 return "Store " + storeName + " not found.";
             }
         }
-        // Inside Worker.processCommand(...)
         else if (command.equals("INCREMENT_PRODUCT_AMOUNT")) {
             // Expected data format: "storeName|productName|incrementValue"
             String[] parts = data.split("\\|", 3);
@@ -310,16 +310,82 @@ public class Worker {
         } else if (command.equals("LIST_STORES")) {
             return storeManager.getAllStores().keySet().toString();
         }
-        else if (command.equals("REVIEW"))
-        {
+        else if (command.equals("REVIEW")) {
             String[] parts = data.split("\\|", 2);
-            String storeName=parts[0];
+            String storeName = parts[0];
             int review = Integer.parseInt(parts[1]);
 
             Store store = storeManager.getStore(storeName);
             store.updateStoreReviews(review);
             String response = storeName + "Reviews Updated: Stars = " + store.getStars();
             return response;
+        } else if (command.equals("AGGREGATE_SALES_BY_STORE")) {
+            // Expect data in the format "FoodCategory=pizzeria"
+            String[] parts = data.split("=");
+            if (parts.length != 2) {
+                return "Invalid aggregation query format. Expected FoodCategory=<value>.";
+            }
+            String foodCategory = parts[1].trim();
+            StringBuilder result = new StringBuilder();
+            int overallTotal = 0;
+            for (Store store : storeManager.getAllStores().values()) {
+                if (store.getFoodCategory().equalsIgnoreCase(foodCategory)) {
+                    Map<String, Store.SalesRecordEntry> sales = store.getSalesRecord();
+                    if (sales.isEmpty()) {
+                        result.append(store.getStoreName()).append(": No sales.\n");
+                    } else {
+                        result.append(store.getStoreName()).append(" Sales: ");
+                        int storeTotal = 0;
+                        for (Map.Entry<String, Store.SalesRecordEntry> entry : sales.entrySet()) {
+                            int qty = entry.getValue().getQuantity();
+                            result.append(entry.getKey()).append("=").append(qty).append(", ");
+                            storeTotal += qty;
+                        }
+                        overallTotal += storeTotal;
+                        // Remove trailing comma and space
+                        if (result.toString().endsWith(", ")) {
+                            result.setLength(result.length() - 2);
+                        }
+                        result.append(" | Total: ").append(storeTotal).append("\n");
+                    }
+                }
+            }
+            result.append("Overall Total Sales for FoodCategory '").append(foodCategory)
+                    .append("': ").append(overallTotal);
+            return result.toString();
+        } else if (command.equals("AGGREGATE_SALES_BY_PRODUCT_CATEGORY")) {
+            // Expect data in the format "ProductCategory=salad"
+            String[] parts = data.split("=");
+            if (parts.length != 2) {
+                return "Invalid aggregation query format. Expected ProductCategory=<value>.";
+            }
+            String productCategory = parts[1].trim();
+            StringBuilder result = new StringBuilder();
+            int overallTotal = 0;
+            for (Store store : storeManager.getAllStores().values()) {
+                Map<String, Store.SalesRecordEntry> sales = store.getSalesRecord();
+                int storeCategoryTotal = 0;
+                StringBuilder storeResult = new StringBuilder();
+                for (Map.Entry<String, Store.SalesRecordEntry> entry : sales.entrySet()) {
+                    if (entry.getValue().getProductType().equalsIgnoreCase(productCategory)) {
+                        int qty = entry.getValue().getQuantity();
+                        storeResult.append(entry.getKey()).append("=").append(qty).append(", ");
+                        storeCategoryTotal += qty;
+                    }
+                }
+                if (storeCategoryTotal > 0) {
+                    overallTotal += storeCategoryTotal;
+                    result.append(store.getStoreName()).append(" (").append(productCategory).append("): ");
+                    // Remove trailing comma and space
+                    if (storeResult.toString().endsWith(", ")) {
+                        storeResult.setLength(storeResult.length() - 2);
+                    }
+                    result.append(storeResult).append(" | Total: ").append(storeCategoryTotal).append("\n");
+                }
+            }
+            result.append("Overall Total Sales for ProductCategory '").append(productCategory)
+                    .append("': ").append(overallTotal);
+            return result.toString();
         }
         return "Unknown command.";
     }
