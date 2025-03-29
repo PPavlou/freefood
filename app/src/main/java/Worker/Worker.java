@@ -6,9 +6,10 @@ import Manager.StoreManager;
 import Manager.ProductManager;
 import model.Store;
 import model.Product;
-
+import mapreduceframework.MapReduceFramework;
+import mapreduceframework.SearchMapper;
+import mapreduceframework.SearchReducer;
 import java.io.*;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,15 +28,13 @@ public class Worker {
         this.productManager = new ProductManager();
     }
 
-    // Default constructor using port 6000.
+    // Default constructor using port 12345.
     public Worker() {
         this(12345);
     }
 
     /**
      * Loads stores from the JSON file located in resources.
-     * The JSON is deserialized into a List of Store objects, and each store is added
-     * to the StoreManager.
      */
     public void loadStores() {
         InputStream is = Worker.class.getResourceAsStream("/jsonf/Stores.json");
@@ -106,73 +105,48 @@ public class Worker {
         }
     }
 
-
-
-
-
     /**
      * Processes a command received from the Master and returns an appropriate response.
-     * Delegates store operations to StoreManager and product operations to ProductManager.
+     * For the SEARCH command, uses the MapReduce framework.
      */
     public String processCommand(String command, String data) {
         Gson gson = new Gson();
         if (command.equals("SEARCH")) {
-            // Expect data in the format "FoodCategory=pizzeria"
-            String[] parts = data.split("=");
+            // Expect data in the format "filterKey=filterValue"
+            String[] parts = data.split("=", 2);
             if (parts.length != 2) {
                 return "Invalid search query format. Expected key=value.";
             }
-            String key = parts[0].trim();
-            String value = parts[1].trim();
+            String filterKey = parts[0].trim();
+            String filterValue = parts[1].trim();
 
-            if (key.equalsIgnoreCase("FoodCategory") ||
-                    key.equalsIgnoreCase("Stars") ||
-                    key.equalsIgnoreCase("AvgPrice") ||
-                    key.equalsIgnoreCase("Radius")){
-                StringBuilder result = new StringBuilder();
-                for (Store store : storeManager.getAllStores().values()) {
-                    switch (key) {
-                        case "FoodCategory":
-                            if (store.getFoodCategory().equalsIgnoreCase(value)) {
-                                result.append(store.toString()).append("\n");
-                            }
-                            break;
-                        case "Stars":
-                            if (Integer.toString(store.getStars()).equals(value)) {
-                                result.append(store.toString()).append("\n");
-                            }
-                            break;
-                        case "AvgPrice":
-                            if (store.getAveragePriceOfStoreSymbol().equals("$".repeat(Integer.parseInt(value))))
-                            {
-                                result.append(store.toString()).append("\n");
-                            }
-                            break;
-                        case "Radius":
-                            double storeLongitude = store.getLongitude();
-                            double storeLatitude = store.getLatitude();
-                            String[] partsRadius = parts[1].split(",");
-                            if (partsRadius.length != 3) {
-                                System.out.println(parts[1]);
-                                return "Invalid search query format. Expected radius,longtitude,latitude.";
-                            }
-                            int radius = Integer.parseInt(partsRadius[0]);
-                            double clientLongitude = Double.parseDouble(partsRadius[1]);
-                            double clientLatitude = Double.parseDouble(partsRadius[2]);
-                            if (calculateDistanceBetween2Points(storeLongitude,storeLatitude,clientLongitude,clientLatitude) <= radius)
-                            {
-                                result.append(store.toString()).append("\n");
-                            }
-                            break;
-                    }
-                }
-                if (result.length() == 0) {
-                    return "No stores found for "+ key +": " + value;
-                }
-                return result.toString();
-            } else {
-                return "Search key not supported.";
+            // Build input list for MapReduce from local stores.
+            List<MapReduceFramework.Pair<String, Store>> input = new ArrayList<>();
+            Map<String, Store> allStores = storeManager.getAllStores();
+            for (Map.Entry<String, Store> entry : allStores.entrySet()) {
+                input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
             }
+
+            // Create Mapper and Reducer instances.
+            SearchMapper mapper = new SearchMapper(filterKey, filterValue);
+            SearchReducer reducer = new SearchReducer();
+
+            // Create and execute the MapReduce job.
+            MapReduceFramework.MapReduceJob<String, Store, String, Store, List<Store>> job =
+                    new MapReduceFramework.MapReduceJob<>(input, mapper, reducer);
+            Map<String, List<Store>> resultMap = job.execute();
+
+            // Combine all the lists of matching stores into a final result.
+            StringBuilder result = new StringBuilder();
+            for (List<Store> storeList : resultMap.values()) {
+                for (Store s : storeList) {
+                    result.append(s.toString()).append("\n");
+                }
+            }
+            if (result.length() == 0) {
+                return "No stores found for " + filterKey + ": " + filterValue;
+            }
+            return result.toString();
         } else if (command.equals("ADD_STORE")) {
             Store store = gson.fromJson(data, Store.class);
             return storeManager.addStore(store);
@@ -205,7 +179,6 @@ public class Worker {
                 return "Store " + storeName + " not found.";
             }
         } else if (command.equals("ADD_PRODUCT")) {
-            // Data format: "storeName|productJson"
             String[] parts = data.split("\\|", 2);
             if (parts.length < 2) {
                 return "Invalid data for ADD_PRODUCT.";
@@ -219,9 +192,7 @@ public class Worker {
             } else {
                 return "Store " + storeName + " not found.";
             }
-
         } else if (command.equals("REMOVE_PRODUCT")) {
-            // Data format: "storeName|productName"
             String[] parts = data.split("\\|", 2);
             if (parts.length < 2) {
                 return "Invalid data for REMOVE_PRODUCT.";
@@ -235,7 +206,6 @@ public class Worker {
                 return "Store " + storeName + " not found.";
             }
         } else if (command.equals("UPDATE_PRODUCT_AMOUNT")) {
-            // Data format: "storeName|productName|newAmount"
             String[] parts = data.split("\\|", 3);
             if (parts.length < 3) {
                 return "Invalid data for UPDATE_PRODUCT_AMOUNT.";
@@ -254,9 +224,7 @@ public class Worker {
             } else {
                 return "Store " + storeName + " not found.";
             }
-        }
-        else if (command.equals("INCREMENT_PRODUCT_AMOUNT")) {
-            // Expected data format: "storeName|productName|incrementValue"
+        } else if (command.equals("INCREMENT_PRODUCT_AMOUNT")) {
             String[] parts = data.split("\\|", 3);
             if (parts.length < 3) {
                 return "Invalid data for INCREMENT_PRODUCT_AMOUNT.";
@@ -269,7 +237,6 @@ public class Worker {
             } catch (NumberFormatException e) {
                 return "Invalid increment format.";
             }
-            // Retrieve store from StoreManager.
             Store store = storeManager.getStore(storeName);
             if (store != null) {
                 for (Product product : store.getProducts()) {
@@ -284,9 +251,7 @@ public class Worker {
             } else {
                 return "Store " + storeName + " not found.";
             }
-        }
-        else if (command.equals("DECREMENT_PRODUCT_AMOUNT")) {
-            // Expected data format: "storeName|productName|decrementValue"
+        } else if (command.equals("DECREMENT_PRODUCT_AMOUNT")) {
             String[] parts = data.split("\\|", 3);
             if (parts.length < 3) {
                 return "Invalid data for DECREMENT_PRODUCT_AMOUNT.";
@@ -305,68 +270,53 @@ public class Worker {
             } else {
                 return "Store " + storeName + " not found.";
             }
-        }
-        else if (command.equals("DELETED_PRODUCTS")) {
+        } else if (command.equals("DELETED_PRODUCTS")) {
             return productManager.getDeletedProductsReport();
         } else if (command.equals("LIST_STORES")) {
             return storeManager.getAllStores().keySet().toString();
-        }
-        else if (command.equals("REVIEW")) {
+        } else if (command.equals("REVIEW")) {
             String[] parts = data.split("\\|", 2);
             String storeName = parts[0];
             int review = Integer.parseInt(parts[1]);
-
             Store store = storeManager.getStore(storeName);
             store.updateStoreReviews(review);
-            String response = storeName + "Reviews Updated: Stars = " + store.getStars();
-            return response;
-
+            return storeName + " Reviews Updated: Stars = " + store.getStars();
         } else if (command.equals("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
-            // Expect data in the format "ProductName=Pepperoni"
             String[] parts = data.split("=");
             if (parts.length != 2) {
                 return "Invalid aggregation query format. Expected ProductName=<value>.";
             }
             String productNameQuery = parts[1].trim();
-            ArrayList<String> results = new ArrayList<String>(); // Create an ArrayList object
+            ArrayList<String> results = new ArrayList<>();
             int overallTotal = 0;
-            // Iterate through all stores
             for (Store store : storeManager.getAllStores().values()) {
                 Map<String, Store.SalesRecordEntry> sales = store.getSalesRecord();
-                // Check if this store has sales for the requested product name
                 if (sales.containsKey(productNameQuery)) {
                     int qty = sales.get(productNameQuery).getQuantity();
                     String result;
-                    result = store.getStoreName()+": "+productNameQuery+" = "+qty;
+                    result = store.getStoreName() + ": " + productNameQuery + " = " + qty;
                     overallTotal += qty;
                     results.add(result);
                 }
             }
-//            result.append("Overall Total Sales for Product '")
-//                    .append(productNameQuery)
-//                    .append("': ").append(overallTotal);
-            return "Overall Total Sales for Product "+productNameQuery+": "+overallTotal+results;
+            return "Overall Total Sales for Product " + productNameQuery + ": " + overallTotal + results;
         }
         return "Unknown command.";
     }
 
-    private double calculateDistanceBetween2Points(double longitude1,double latitude1,double longitude2,double latitude2)
-    {
-        var R = 6371; // Radius of the earth in km
-        double dLat = deg2rad(latitude2-latitude1);
-        double dLon = deg2rad(longitude2-longitude1);
-        double a =
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                        Math.cos(deg2rad(latitude1)) * Math.cos(deg2rad(latitude2)) *
-                                Math.sin(dLon/2) * Math.sin(dLon/2)
-                ;
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        double d = R * c; // Distance in km
-        return d;
+    private double calculateDistanceBetween2Points(double longitude1, double latitude1, double longitude2, double latitude2) {
+        int R = 6371;
+        double dLat = deg2rad(latitude2 - latitude1);
+        double dLon = deg2rad(longitude2 - longitude1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(latitude1)) * Math.cos(deg2rad(latitude2)) *
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     private double deg2rad(double deg) {
-        return deg * (Math.PI/180);
+        return deg * (Math.PI / 180);
     }
 
     public static void main(String[] args) {

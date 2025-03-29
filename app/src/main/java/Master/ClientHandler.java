@@ -12,7 +12,7 @@ import Worker.WorkerInfo;
 
 public class ClientHandler implements Runnable {
     private Socket clientSocket;
-    private List<WorkerInfo> workerList;
+    private List<WorkerInfo> workerList; // (if needed for multiple workers)
     private Socket workerSocket;
     private BufferedReader initialReader;
     private String firstLine;
@@ -32,7 +32,7 @@ public class ClientHandler implements Runnable {
                 OutputStream outStream = clientSocket.getOutputStream();
                 PrintWriter writer = new PrintWriter(outStream, true)
         ) {
-            // Use the firstLine as the command
+            // Use the firstLine as the command.
             String command = firstLine;
             String data = reader.readLine();
             System.out.println("Master received command: " + command);
@@ -45,34 +45,17 @@ public class ClientHandler implements Runnable {
             System.err.println("ClientHandler error: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            try {
-                clientSocket.close();
-            } catch(IOException e) {}
+            try { clientSocket.close(); } catch(IOException e) {}
         }
     }
 
     private WorkerInfo chooseWorker(String command, String data) {
-        // For LIST_STORES or unknown commands, simply use the first worker.
-        if (command.equals("LIST_STORES")) {
-            return workerList.get(0);
-        } else if (command.equals("ADD_STORE") || command.equals("PURCHASE_PRODUCT") ||
-                command.equals("ADD_PRODUCT") || command.equals("REMOVE_STORE") ||
-                command.equals("REMOVE_PRODUCT")) {
-            // Extract store name from data.
-            String storeName = extractStoreName(command, data);
-            if (storeName == null) {
-                return workerList.get(0);
-            }
-            int hash = Math.abs(storeName.hashCode());
-            int index = hash % workerList.size();
-            return workerList.get(index);
-        }
+        // For simplicity, we return the first worker.
         return workerList.get(0);
     }
 
     private String extractStoreName(String command, String data) {
         if (command.equals("ADD_STORE")) {
-            // Data is JSON; here we simply search for the "StoreName" value.
             int idx = data.indexOf("\"StoreName\"");
             if (idx != -1) {
                 int colon = data.indexOf(":", idx);
@@ -83,7 +66,6 @@ public class ClientHandler implements Runnable {
                 }
             }
         } else {
-            // For other commands, assume the format "storeName|..."
             String[] parts = data.split("\\|");
             if (parts.length > 0) {
                 return parts[0].trim();
