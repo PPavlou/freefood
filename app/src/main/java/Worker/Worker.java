@@ -10,6 +10,7 @@ import model.Product;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -327,7 +328,7 @@ public class Worker {
                 return "Invalid aggregation query format. Expected ProductName=<value>.";
             }
             String productNameQuery = parts[1].trim();
-            StringBuilder result = new StringBuilder();
+            ArrayList<String> results = new ArrayList<String>(); // Create an ArrayList object
             int overallTotal = 0;
             // Iterate through all stores
             for (Store store : storeManager.getAllStores().values()) {
@@ -335,16 +336,16 @@ public class Worker {
                 // Check if this store has sales for the requested product name
                 if (sales.containsKey(productNameQuery)) {
                     int qty = sales.get(productNameQuery).getQuantity();
-                    result.append(store.getStoreName())
-                            .append(": ").append(productNameQuery)
-                            .append(" = ").append(qty).append("\n");
+                    String result;
+                    result = store.getStoreName()+": "+productNameQuery+" = "+qty;
                     overallTotal += qty;
+                    results.add(result);
                 }
             }
-            result.append("Overall Total Sales for Product '")
-                    .append(productNameQuery)
-                    .append("': ").append(overallTotal);
-            return result.toString();
+//            result.append("Overall Total Sales for Product '")
+//                    .append(productNameQuery)
+//                    .append("': ").append(overallTotal);
+            return "Overall Total Sales for Product "+productNameQuery+": "+overallTotal+results;
         }
         return "Unknown command.";
     }
