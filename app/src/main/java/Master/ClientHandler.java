@@ -1,9 +1,9 @@
 package Master;
 
 import com.google.gson.Gson;
+import mapreduce.ClientCommandMapperReducer;
+import mapreduce.ManagerCommandMapperReducer;
 import mapreduce.DistributedMapReduceJob;
-import mapreduce.SearchReducer; // Ensure that SearchReducer is in package 'mapreduce'
-import model.Store;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -32,24 +32,25 @@ public class ClientHandler implements Runnable {
             System.out.println("Master received command: " + command);
             System.out.println("Master received data: " + data);
 
+            List<String> workerResponses = forwardToAllWorkers(command, data);
             String finalResponse;
-            if ("SEARCH".equalsIgnoreCase(command)) {
-                // Forward the SEARCH command to all workers.
-                List<String> workerResponses = forwardToAllWorkers(command, data);
-                // Use DistributedMapReduceJob with our SearchReducer.
-                // Note: SearchReducer implements Reducer<String, Store, List<Store>>
-                DistributedMapReduceJob<String, Store, List<Store>> job =
-                        new DistributedMapReduceJob<>(workerResponses, new SearchReducer());
-                Gson gson = new Gson();
+            Gson gson = new Gson();
+
+            // Choose reducer based on client or manager command.
+            if (command.equalsIgnoreCase("SEARCH") ||
+                    command.equalsIgnoreCase("REVIEW") ||
+                    command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
+                ClientCommandMapperReducer.ClientCommandReducer reducer =
+                        new ClientCommandMapperReducer.ClientCommandReducer(command);
+                DistributedMapReduceJob<String, String, String> job =
+                        new DistributedMapReduceJob<>(workerResponses, reducer);
                 finalResponse = gson.toJson(job.execute());
             } else {
-                // For non-search commands, simply aggregate the responses.
-                List<String> responses = forwardToAllWorkers(command, data);
-                StringBuilder sb = new StringBuilder();
-                for (String resp : responses) {
-                    sb.append(resp).append("\n");
-                }
-                finalResponse = sb.toString();
+                ManagerCommandMapperReducer.CommandReducer reducer =
+                        new ManagerCommandMapperReducer.CommandReducer(command);
+                DistributedMapReduceJob<String, String, String> job =
+                        new DistributedMapReduceJob<>(workerResponses, reducer);
+                finalResponse = gson.toJson(job.execute());
             }
             writer.println(finalResponse);
         } catch (IOException e) {
