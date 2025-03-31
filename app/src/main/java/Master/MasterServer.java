@@ -1,17 +1,18 @@
 package Master;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.io.*;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import Worker.WorkerInfo;
+import java.util.ArrayList;
 
 public class MasterServer {
     private static final int MASTER_PORT = 12345;
-    // We'll store the persistent worker connection here.
-    public static Socket workerSocket = null;
+    // Thread-safe list for worker sockets.
+    public static List<Socket> workerSockets = Collections.synchronizedList(new ArrayList<>());
+    // A counter for worker registrations.
+    private static int workerCount = 0;
 
     public static void main(String[] args) {
         ServerSocket serverSocket = null;
@@ -21,32 +22,36 @@ public class MasterServer {
             while (true) {
                 Socket socket = serverSocket.accept();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
                 socket.setSoTimeout(1000); // short timeout to read handshake
 
-                // Peek at the first line to see if this is a worker handshake.
+                // Read the first line to determine if this is a worker handshake.
                 String firstLine = reader.readLine();
                 if ("WORKER_HANDSHAKE".equals(firstLine)) {
-                    // This connection is from a worker.
-                    workerSocket = socket;
-                    System.out.println("Persistent worker connection registered.");
+                    // Assign a worker ID and update count.
+                    int assignedId;
+                    synchronized (MasterServer.class) {
+                        assignedId = workerCount;
+                        workerCount++;
+                    }
+                    // Inform the worker of its assignment:
+                    // Format: WORKER_ASSIGN:<assignedId>:<current total workers>
+                    writer.println("WORKER_ASSIGN:" + assignedId + ":" + workerCount);
+                    // Add the socket to the list.
+                    workerSockets.add(socket);
+                    System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
                 } else {
-                    // This is a manager connection.
-                    // Since we've already read the first line, pass it along.
-                    ClientHandler clientHandler = new ClientHandler(socket, workerSocket, firstLine, reader);
-                    // Instead of using ExecutorService, we create and start a new Thread.
+                    // This is a client (manager) connection.
+                    ClientHandler clientHandler = new ClientHandler(socket, workerSockets, firstLine, reader);
                     new Thread(clientHandler).start();
                 }
             }
         } catch (IOException e) {
-            System.err.println("Server error: " + e.getMessage());
+            System.err.println("Master Server error: " + e.getMessage());
             e.printStackTrace();
         } finally {
             if (serverSocket != null) {
-                try {
-                    serverSocket.close();
-                } catch(IOException e) {
-                    // Ignore closing exception.
-                }
+                try { serverSocket.close(); } catch (IOException e) { }
             }
         }
     }

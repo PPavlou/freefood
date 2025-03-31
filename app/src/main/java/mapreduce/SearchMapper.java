@@ -1,6 +1,5 @@
-package mapreduceframework;
+package mapreduce;
 
-import mapreduceframework.MapReduceFramework;
 import model.Store;
 import java.util.ArrayList;
 import java.util.List;
