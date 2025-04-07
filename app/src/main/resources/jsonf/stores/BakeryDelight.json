@@ -1,0 +1,23 @@
+{
+  "StoreName": "BakeryDelight",
+  "Latitude": 37.998999,
+  "Longitude": 23.740123,
+  "FoodCategory": "bakery",
+  "Stars": 5,
+  "NoOfVotes": 28,
+  "StoreLogo": "",
+  "Products": [
+    {
+      "ProductName": "Croissant",
+      "ProductType": "pastry",
+      "Available Amount": 60,
+      "Price": 1.8
+    },
+    {
+      "ProductName": "Baguette",
+      "ProductType": "bread",
+      "Available Amount": 40,
+      "Price": 2.2
+    }
+  ]
+}

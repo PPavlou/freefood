@@ -1,0 +1,29 @@
+{
+  "StoreName": "SeaFoodExpress",
+  "Latitude": 37.997654,
+  "Longitude": 23.728765,
+  "FoodCategory": "seafood",
+  "Stars": 5,
+  "NoOfVotes": 48,
+  "StoreLogo": "",
+  "Products": [
+    {
+      "ProductName": "Fried Calamari",
+      "ProductType": "seafood",
+      "Available Amount": 80,
+      "Price": 7.5
+    },
+    {
+      "ProductName": "Grilled Salmon",
+      "ProductType": "seafood",
+      "Available Amount": 60,
+      "Price": 9.0
+    },
+    {
+      "ProductName": "Shrimp Pasta",
+      "ProductType": "seafood",
+      "Available Amount": 40,
+      "Price": 8.5
+    }
+  ]
+}

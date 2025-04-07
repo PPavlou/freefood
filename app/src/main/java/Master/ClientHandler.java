@@ -1,13 +1,16 @@
 package Master;
 
 import com.google.gson.Gson;
-import mapreduce.ClientCommandMapperReducer;
+import com.google.gson.reflect.TypeToken;
 import mapreduce.ManagerCommandMapperReducer;
 import mapreduce.DistributedMapReduceJob;
 import java.io.*;
+import java.lang.reflect.Type;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ClientHandler implements Runnable {
     private Socket clientSocket;
@@ -36,16 +39,25 @@ public class ClientHandler implements Runnable {
             String finalResponse;
             Gson gson = new Gson();
 
-            // Choose reducer based on client or manager command.
+            // For commands that are externally reduced (client: SEARCH, REVIEW, AGGREGATE_SALES_BY_PRODUCT_NAME; manager: LIST_STORES, DELETED_PRODUCTS),
+            // merge the reduced results (each response is a JSON object representing a Map<String, String>).
             if (command.equalsIgnoreCase("SEARCH") ||
                     command.equalsIgnoreCase("REVIEW") ||
-                    command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
-                ClientCommandMapperReducer.ClientCommandReducer reducer =
-                        new ClientCommandMapperReducer.ClientCommandReducer(command);
-                DistributedMapReduceJob<String, String, String> job =
-                        new DistributedMapReduceJob<>(workerResponses, reducer);
-                finalResponse = gson.toJson(job.execute());
+                    command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME") ||
+                    command.equalsIgnoreCase("LIST_STORES") ||
+                    command.equalsIgnoreCase("DELETED_PRODUCTS")) {
+
+                Map<String, String> combined = new HashMap<>();
+                for (String response : workerResponses) {
+                    Type type = new TypeToken<Map<String, String>>(){}.getType();
+                    Map<String, String> partial = gson.fromJson(response, type);
+                    for (Map.Entry<String, String> entry : partial.entrySet()) {
+                        combined.merge(entry.getKey(), entry.getValue(), (v1, v2) -> v1 + "\n" + v2);
+                    }
+                }
+                finalResponse = gson.toJson(combined);
             } else {
+                // For manager commands that do not require external reduction, use the local DistributedMapReduceJob.
                 ManagerCommandMapperReducer.CommandReducer reducer =
                         new ManagerCommandMapperReducer.CommandReducer(command);
                 DistributedMapReduceJob<String, String, String> job =
