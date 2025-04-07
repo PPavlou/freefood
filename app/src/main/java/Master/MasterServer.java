@@ -42,7 +42,7 @@ public class MasterServer {
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
                 } else {
                     // This is a client (manager) connection.
-                    ClientHandler clientHandler = new ClientHandler(socket, workerSockets, firstLine, reader);
+                    ActionForClients clientHandler = new ActionForClients(socket, workerSockets, firstLine, reader);
                     new Thread(clientHandler).start();
                 }
             }
