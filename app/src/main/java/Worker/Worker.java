@@ -51,8 +51,7 @@ public class Worker {
                 command.equalsIgnoreCase("DELETED_PRODUCTS");
 
         if (command.equalsIgnoreCase("SEARCH") ||
-                command.equalsIgnoreCase("REVIEW") ||
-                command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
+                command.equalsIgnoreCase("REVIEW")) {
             // Client commands: process over all local stores.
             Map<String, Store> localStores = storeManager.getAllStores();
             for (Map.Entry<String, Store> entry : localStores.entrySet()) {
@@ -72,7 +71,24 @@ public class Worker {
                 return mappingResult;
             }
 
-        } else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
+        } else if (command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
+            Map<String, Store> localStores = storeManager.getAllStores();
+            for (Map.Entry<String, Store> entry : localStores.entrySet()) {
+                input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
+            }
+            // Use the new constructor to pass the aggregation query (data)
+            ManagerCommandMapperReducer.CommandMapper mapper =
+                    new ManagerCommandMapperReducer.CommandMapper(command, data, storeManager, productManager);
+            List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+            for (MapReduceFramework.Pair<String, Store> pair : input) {
+                if (pair.getValue() != null) {
+                    intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+                }
+            }
+            String mappingResult = gson.toJson(intermediate);
+            return sendToReduceServer(command, mappingResult);
+        }
+        else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
             // For PURCHASE_PRODUCT, process only the target store.
             String[] parts = data.split("\\|");
             if (parts.length < 3) {

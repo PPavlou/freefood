@@ -18,12 +18,20 @@ public class ManagerCommandMapperReducer {
 
     public static class CommandMapper implements MapReduceFramework.Mapper<String, Store, String, String> {
         private String command;
+        private String query = null;
         private StoreManager storeManager;
         private ProductManager productManager;
         private Gson gson = new Gson();
 
         public CommandMapper(String command, StoreManager storeManager, ProductManager productManager) {
             this.command = command;
+            this.storeManager = storeManager;
+            this.productManager = productManager;
+        }
+
+        public CommandMapper(String command, String query, StoreManager storeManager, ProductManager productManager) {
+            this.command = command;
+            this.query = query;
             this.storeManager = storeManager;
             this.productManager = productManager;
         }
@@ -164,6 +172,20 @@ public class ManagerCommandMapperReducer {
                     }
                     break;
                 }
+                case "AGGREGATE_SALES_BY_PRODUCT_NAME": {
+                    // Expect the query to be in the format "ProductName=<value>"
+                    if (query == null) {
+                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
+                                "Invalid aggregation query format. Expected ProductName=<value>."));
+                    } else {
+                        // Extract the product name from the query.
+                        String productName = query.trim().substring("ProductName=".length()).trim();
+                        int aggregatedSales = storeObj.getSalesForProduct(productName);
+                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), String.valueOf(aggregatedSales)));
+                    }
+                    break;
+                }
+
                 default: {
                     results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
                             "Command " + command + " not supported in manager filter group."));

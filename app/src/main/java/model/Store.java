@@ -73,6 +73,19 @@ public class Store {
     }
 
     /**
+     * Retrieves the aggregated sales quantity for a given product.
+     *
+     * @param productName The name of the product.
+     * @return The total quantity sold for the product; returns 0 if the product is not in the sales record.
+     */
+    public int getSalesForProduct(String productName) {
+        if (salesRecord != null && salesRecord.containsKey(productName)) {
+            return salesRecord.get(productName).getQuantity();
+        }
+        return 0;
+    }
+
+    /**
      * Constructs a Store with specified details.
      *
      * @param storeName    The name of the store.
