@@ -56,14 +56,15 @@ public class ClientCommandMapperReducer {
                     } else if ("Stars".equalsIgnoreCase(filterKey)) {
                         try {
                             int starsFilter = Integer.parseInt(filterValue);
-                            if (storeObj.getStars() >= starsFilter) {
+                            if (storeObj.getStars() == starsFilter) {
                                 results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), gson.toJson(storeObj)));
                             }
                         } catch (NumberFormatException e) {
                             // Ignore invalid format.
                         }
                     } else if ("AvgPrice".equalsIgnoreCase(filterKey)) {
-                        if (storeObj.getAveragePriceOfStoreSymbol().equals(filterValue)) {
+                        int count = Integer.parseInt(filterValue);
+                        if (storeObj.getAveragePriceOfStoreSymbol().equals("$".repeat(count))) {
                             results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), gson.toJson(storeObj)));
                         }
                     } else if ("Radius".equalsIgnoreCase(filterKey)) {
