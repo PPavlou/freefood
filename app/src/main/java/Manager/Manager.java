@@ -219,7 +219,36 @@ public class Manager {
                     System.out.print("Enter Product Name for aggregation (e.g., Pepperoni): ");
                     String aggProductName = scanner.nextLine();
                     String aggProductResponse = sendCommand("AGGREGATE_SALES_BY_PRODUCT_NAME", "ProductName=" + aggProductName);
-                    printPrettyResponse(aggProductResponse);
+
+                    try {
+                        // Parse the JSON string returned (which is expected to be a JSON object)
+                        JsonObject jsonObject = JsonParser.parseString(aggProductResponse).getAsJsonObject();
+                        int totalSales = 0;
+
+                        // Iterate over the entries to sum the total sales
+                        for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                            try {
+                                // Convert each store’s sales string value to an integer
+                                int storeSales = Integer.parseInt(entry.getValue().getAsString());
+                                totalSales += storeSales;
+                            } catch (NumberFormatException e) {
+                                // If it's not a valid number (for example, an error message) ignore it
+                            }
+                        }
+
+                        // Add a "TOTAL" field to the JSON with the computed sum
+                        jsonObject.addProperty("TOTAL", totalSales);
+
+                        // Pretty-print the JSON object including the TOTAL field
+                        Gson gsonTotal = new GsonBuilder().setPrettyPrinting().create();
+                        System.out.println("Aggregation Response:");
+                        System.out.println(gsonTotal.toJson(jsonObject));
+
+                    } catch (Exception e) {
+                        // If parsing fails, just print the original response
+                        System.out.println("Aggregation Response:");
+                        System.out.println(aggProductResponse);
+                    }
                     break;
                 case 10:
                     System.out.println("Exiting Manager Console.");
