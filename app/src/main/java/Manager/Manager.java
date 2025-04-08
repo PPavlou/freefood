@@ -3,7 +3,7 @@ package Manager;
 import java.io.*;
 import java.net.Socket;
 import java.util.*;
-import com.google.gson.Gson;
+import com.google.gson.*;
 import model.Store;
 import model.Product;
 
@@ -34,6 +34,28 @@ public class Manager {
         return response;
     }
 
+
+    private void printPrettyResponse(String jsonResponse) {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        try {
+            // Try to parse the response string as a JSON object.
+            JsonObject jsonObject = JsonParser.parseString(jsonResponse).getAsJsonObject();
+            // Check if any field contains a nested JSON string.
+            for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                try {
+                    JsonElement nested = JsonParser.parseString(entry.getValue().getAsString());
+                    jsonObject.add(entry.getKey(), nested);
+                } catch (Exception e) {
+                    // If the value is not a nested JSON, leave it unchanged.
+                }
+            }
+            System.out.println(gson.toJson(jsonObject));
+        } catch (Exception ex) {
+            // If parsing fails, print the original response.
+            System.out.println(jsonResponse);
+        }
+    }
+
     /**
      * Provides an interactive console for Manager operations.
      */
@@ -51,8 +73,8 @@ public class Manager {
             System.out.println("6. Decrease Product Amount");
             System.out.println("7. Show Deleted Products Report");
             System.out.println("8. List Stores");
-            System.out.println("9. Exit");
-            System.out.println("10. Show Sales by Product");
+            System.out.println("9. Show Sales by Product");
+            System.out.println("10. Exit");
             System.out.print("Choice: ");
             int choice;
             try {
@@ -109,14 +131,18 @@ public class Manager {
 
                     String storeJson = gson.toJson(store);
                     System.out.println("Sending ADD_STORE command...");
-                    System.out.println("Response: " + sendCommand("ADD_STORE", storeJson));
+                    String addStoreResponse = sendCommand("ADD_STORE", storeJson);
+                    System.out.println("Response:");
+                    printPrettyResponse(addStoreResponse);
                     break;
                 case 2:
                     // Remove Store
                     System.out.print("Enter the exact store name to remove: ");
                     String removeStoreName = scanner.nextLine();
                     System.out.println("Sending REMOVE_STORE command...");
-                    System.out.println("Response: " + sendCommand("REMOVE_STORE", removeStoreName));
+                    String removeStoreResponse = sendCommand("REMOVE_STORE", removeStoreName);
+                    System.out.println("Response:");
+                    printPrettyResponse(removeStoreResponse);
                     break;
                 case 3:
                     // Add Product
@@ -134,7 +160,9 @@ public class Manager {
                     Product product = new Product(productName, productType, availableAmount, productPrice);
                     String productJson = gson.toJson(product);
                     System.out.println("Sending ADD_PRODUCT command...");
-                    System.out.println("Response: " + sendCommand("ADD_PRODUCT", storeNameForAdd + "|" + productJson));
+                    String addProductResponse = sendCommand("ADD_PRODUCT", storeNameForAdd + "|" + productJson);
+                    System.out.println("Response:");
+                    printPrettyResponse(addProductResponse);
                     break;
                 case 4:
                     // Remove Product
@@ -143,7 +171,9 @@ public class Manager {
                     System.out.print("Enter product name to remove: ");
                     String prodToRemove = scanner.nextLine();
                     System.out.println("Sending REMOVE_PRODUCT command...");
-                    System.out.println("Response: " + sendCommand("REMOVE_PRODUCT", storeNameForRemove + "|" + prodToRemove));
+                    String removeProductResponse = sendCommand("REMOVE_PRODUCT", storeNameForRemove + "|" + prodToRemove);
+                    System.out.println("Response:");
+                    printPrettyResponse(removeProductResponse);
                     break;
                 case 5:
                     // Increase Product Amount
@@ -154,7 +184,9 @@ public class Manager {
                     System.out.print("Enter amount to add: ");
                     String incrementValue = scanner.nextLine();
                     System.out.println("Sending INCREMENT_PRODUCT_AMOUNT command...");
-                    System.out.println("Response: " + sendCommand("INCREMENT_PRODUCT_AMOUNT", storeNameForIncrease + "|" + prodNameForIncrease + "|" + incrementValue));
+                    String incrementProductAmountResponse = sendCommand("INCREMENT_PRODUCT_AMOUNT", storeNameForIncrease + "|" + prodNameForIncrease + "|" + incrementValue);
+                    System.out.println("Response:");
+                    printPrettyResponse(incrementProductAmountResponse);
                     break;
                 case 6:
                     // Decrease Product Amount
@@ -165,28 +197,34 @@ public class Manager {
                     System.out.print("Enter amount to remove: ");
                     String decrementValue = scanner.nextLine();
                     System.out.println("Sending DECREMENT_PRODUCT_AMOUNT command...");
-                    System.out.println("Response: " + sendCommand("DECREMENT_PRODUCT_AMOUNT", storeNameForDecrease + "|" + prodNameForDecrease + "|" + decrementValue));
+                    String decrementProductAmountResponse = sendCommand("DECREMENT_PRODUCT_AMOUNT", storeNameForDecrease + "|" + prodNameForDecrease + "|" + decrementValue);
+                    System.out.println("Response:");
+                    printPrettyResponse(decrementProductAmountResponse);
                     break;
                 case 7:
                     // Show Deleted Products Report
                     System.out.println("Sending DELETED_PRODUCTS command...");
-                    System.out.println("Deleted Products Report: " + sendCommand("DELETED_PRODUCTS", ""));
+                    String showDeletedProductsResponse = sendCommand("DELETED_PRODUCTS", "");
+                    System.out.println("Deleted Products Report:");
+                    printPrettyResponse(showDeletedProductsResponse);
                     break;
                 case 8:
                     // List Stores
                     System.out.println("Sending LIST_STORES command...");
-                    System.out.println("Stores: " + sendCommand("LIST_STORES", ""));
+                    String listStoresResponse = sendCommand("LIST_STORES", "");
+                    System.out.println("Stores:");
+                    printPrettyResponse(listStoresResponse);
                     break;
                 case 9:
-                    System.out.println("Exiting Manager Console.");
-                    scanner.close();
-                    return;
-                case 10:
                     System.out.print("Enter Product Name for aggregation (e.g., Pepperoni): ");
                     String aggProductName = scanner.nextLine();
                     String aggProductResponse = sendCommand("AGGREGATE_SALES_BY_PRODUCT_NAME", "ProductName=" + aggProductName);
-                    System.out.println("Aggregation Response:\n" + aggProductResponse);
+                    printPrettyResponse(aggProductResponse);
                     break;
+                case 10:
+                    System.out.println("Exiting Manager Console.");
+                    scanner.close();
+                    return;
                 default:
                     System.out.println("Invalid option. Please try again.");
             }
