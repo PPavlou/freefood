@@ -13,6 +13,7 @@ public class MasterServer {
     public static List<Socket> workerSockets = Collections.synchronizedList(new ArrayList<>());
     // A counter for worker registrations.
     private static int workerCount = 0;
+    public static final Object workerAvailable = new Object();
 
     public static void main(String[] args) {
         ServerSocket serverSocket = null;
@@ -37,8 +38,11 @@ public class MasterServer {
                     // Inform the worker of its assignment:
                     // Format: WORKER_ASSIGN:<assignedId>:<current total workers>
                     writer.println("WORKER_ASSIGN:" + assignedId + ":" + workerCount);
-                    // Add the socket to the list.
-                    workerSockets.add(socket);
+                    // Add the socket to the list and notify available threads.
+                    synchronized (workerAvailable) {
+                        workerSockets.add(socket);
+                        workerAvailable.notifyAll();
+                    }
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
                 } else {
                     // This is a client (manager) connection.

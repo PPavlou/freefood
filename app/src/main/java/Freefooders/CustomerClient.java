@@ -197,7 +197,7 @@ public class CustomerClient {
                         String messageForReview = "Review";
                         int review = getValidInteger(messageForReview,5);
                         String reviewResponse = sendCommand("REVIEW", storeName + "|" + Integer.toString(review));
-                        System.out.println(reviewResponse);
+                        printPrettyResponse(reviewResponse);
                     }
                     break;
                 case 6:
