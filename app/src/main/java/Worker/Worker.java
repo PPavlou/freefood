@@ -50,8 +50,7 @@ public class Worker {
                 command.equalsIgnoreCase("LIST_STORES") ||
                 command.equalsIgnoreCase("DELETED_PRODUCTS");
 
-        if (command.equalsIgnoreCase("SEARCH") ||
-                command.equalsIgnoreCase("REVIEW")) {
+        if (command.equalsIgnoreCase("SEARCH")) {
             // Client commands: process over all local stores.
             Map<String, Store> localStores = storeManager.getAllStores();
             for (Map.Entry<String, Store> entry : localStores.entrySet()) {
@@ -85,6 +84,32 @@ public class Worker {
                     intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
                 }
             }
+            String mappingResult = gson.toJson(intermediate);
+            return sendToReduceServer(command, mappingResult);
+        }
+        else if (command.equalsIgnoreCase("REVIEW"))
+        {
+            // For PURCHASE_PRODUCT, process only the target store.
+            String[] parts = data.split("\\|");
+            if (parts.length < 2) {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Invalid data for REVIEW.")));
+            }
+            String storeName = parts[0].trim();
+            Store store = storeManager.getStore(storeName);
+            if (store != null) {
+                input.add(new MapReduceFramework.Pair<>(data, store));
+            } else {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Store " + storeName + " not found.")));
+            }
+            ClientCommandMapperReducer.ClientCommandMapper mapper =
+                    new ClientCommandMapperReducer.ClientCommandMapper(command, data, storeManager.getAllStores());
+            List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+            for (MapReduceFramework.Pair<String, Store> pair : input) {
+                intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+            }
+            // PURCHASE_PRODUCT does not require reduction.
             String mappingResult = gson.toJson(intermediate);
             return sendToReduceServer(command, mappingResult);
         }

@@ -23,6 +23,7 @@ public class ClientCommandMapperReducer {
         // For SEARCH only.
         private String filterKey;
         private String filterValue;
+        private String data;
         // Local store map (provided by the worker)
         private Map<String, Store> localStores;
 
@@ -34,6 +35,7 @@ public class ClientCommandMapperReducer {
         public ClientCommandMapper(String command, String data, Map<String, Store> localStores) {
             this.command = command;
             this.localStores = localStores;
+            this.data = data;
             if ("SEARCH".equalsIgnoreCase(command)) {
                 String[] parts = data.split("=", 2);
                 if (parts.length == 2) {
@@ -95,8 +97,8 @@ public class ClientCommandMapperReducer {
                             int review = Integer.parseInt(parts[1].trim());
                             if (storeObj.getStoreName().equals(storeName)) {
                                 storeObj.updateStoreReviews(review);
-                                results.add(new MapReduceFramework.Pair<>(storeName,
-                                        storeName + " Reviews Updated: Stars = " + storeObj.getStars()));
+                                results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
+                                        "Gave "+ "*".repeat(review) +" Stars Review for: "+storeObj.getStoreName()));
                             }
                         } catch (NumberFormatException e) {
                             results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid review format."));
