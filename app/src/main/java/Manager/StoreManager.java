@@ -19,10 +19,6 @@ public class StoreManager {
         storeMap = Collections.synchronizedMap(new HashMap<>());
     }
 
-    public synchronized void clear() {
-        storeMap.clear();
-    }
-
     /**
      * Adds a new store if it does not already exist.
      *

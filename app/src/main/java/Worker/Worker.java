@@ -36,32 +36,13 @@ public class Worker {
     }
 
     /**
-     * Processes commands sent from the Master.
-     * It now supports the RELOAD_STORES command for dynamic workload rebalancing.
+     * Processes a command by mapping over local stores.
+     * For commands that require reduction (client: SEARCH, REVIEW, AGGREGATE_SALES_BY_PRODUCT_NAME;
+     * manager: LIST_STORES, DELETED_PRODUCTS), the worker sends its mapping result to the external reduce server.
      */
     public String processCommand(String command, String data) {
-        // ---------- RELOAD_STORES branch ----------
-        if (command.equalsIgnoreCase("RELOAD_STORES")) {
-            try {
-                // Parse the JSON payload representing the list of stores assigned to this worker.
-                java.lang.reflect.Type storeListType = new TypeToken<List<Store>>(){}.getType();
-                List<Store> newStores = gson.fromJson(data, storeListType);
-                // Reinitialize the storeManager with the new assignments.
-                storeManager = new Manager.StoreManager();
-                for (Store s : newStores) {
-                    s.setAveragePriceOfStore();
-                    s.setAveragePriceOfStoreSymbol();
-                    storeManager.addStore(s);
-                }
-                System.out.println("Worker " + workerId + " reloaded " + newStores.size() + " stores.");
-                return "{\"status\":\"Reload successful\",\"storeCount\":" + newStores.size() + "}";
-            } catch (Exception ex) {
-                return "{\"error\":\"Error reloading stores: " + ex.getMessage() + "\"}";
-            }
-        }
-        // ---------- End RELOAD_STORES branch ----------
-
         List<MapReduceFramework.Pair<String, Store>> input = new ArrayList<>();
+
         // Determine if this command requires external reduction.
         boolean needsReduce = command.equalsIgnoreCase("SEARCH") ||
                 command.equalsIgnoreCase("REVIEW") ||
@@ -70,7 +51,7 @@ public class Worker {
                 command.equalsIgnoreCase("DELETED_PRODUCTS");
 
         if (command.equalsIgnoreCase("SEARCH")) {
-            // Process over all local stores.
+            // Client commands: process over all local stores.
             Map<String, Store> localStores = storeManager.getAllStores();
             for (Map.Entry<String, Store> entry : localStores.entrySet()) {
                 input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
@@ -81,17 +62,20 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
+
             String mappingResult = gson.toJson(intermediate);
             if (needsReduce) {
                 return sendToReduceServer(command, mappingResult);
             } else {
                 return mappingResult;
             }
+
         } else if (command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
             Map<String, Store> localStores = storeManager.getAllStores();
             for (Map.Entry<String, Store> entry : localStores.entrySet()) {
                 input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
             }
+            // Use the new constructor to pass the aggregation query (data)
             ManagerCommandMapperReducer.CommandMapper mapper =
                     new ManagerCommandMapperReducer.CommandMapper(command, data, storeManager, productManager);
             List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
@@ -102,7 +86,10 @@ public class Worker {
             }
             String mappingResult = gson.toJson(intermediate);
             return sendToReduceServer(command, mappingResult);
-        } else if (command.equalsIgnoreCase("REVIEW")) {
+        }
+        else if (command.equalsIgnoreCase("REVIEW"))
+        {
+            // For PURCHASE_PRODUCT, process only the target store.
             String[] parts = data.split("\\|");
             if (parts.length < 2) {
                 return gson.toJson(Collections.singletonList(
@@ -122,9 +109,12 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
+            // PURCHASE_PRODUCT does not require reduction.
             String mappingResult = gson.toJson(intermediate);
             return sendToReduceServer(command, mappingResult);
-        } else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
+        }
+        else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
+            // For PURCHASE_PRODUCT, process only the target store.
             String[] parts = data.split("\\|");
             if (parts.length < 3) {
                 return gson.toJson(Collections.singletonList(
@@ -144,12 +134,15 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
+            // PURCHASE_PRODUCT does not require reduction.
             return gson.toJson(intermediate);
+
         } else {
             // Manager commands.
             if (command.equalsIgnoreCase("ADD_STORE")) {
                 Store store = gson.fromJson(data, Store.class);
                 input.add(new MapReduceFramework.Pair<>(store.getStoreName(), store));
+                // (Then process with the manager mapper as before.)
                 ManagerCommandMapperReducer.CommandMapper mapper =
                         new ManagerCommandMapperReducer.CommandMapper(command, storeManager, productManager);
                 List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
@@ -179,6 +172,8 @@ public class Worker {
                 return gson.toJson(intermediate);
             } else if (command.equalsIgnoreCase("LIST_STORES") ||
                     command.equalsIgnoreCase("DELETED_PRODUCTS")) {
+                // Instead of iterating over each store and mapping repeatedly,
+                // build the mapping result just once.
                 List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
                 if (command.equalsIgnoreCase("LIST_STORES")) {
                     for (String storeName : storeManager.getAllStores().keySet()) {
@@ -219,14 +214,14 @@ public class Worker {
     }
 
     private String sendToReduceServer(String command, String mappingResult) {
-        String reduceServerHost = "192.168.1.13";
+        String reduceServerHost = "localhost";
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-            writer.println(command);
-            writer.println(mappingResult);
+            writer.println(command);         // send the command
+            writer.println(mappingResult);     // send the mapping result as JSON
             String reducedResponse = reader.readLine();
             return reducedResponse;
         } catch (IOException e) {
@@ -235,9 +230,11 @@ public class Worker {
         }
     }
 
+    // start() and loadStores() remain unchanged.
+
     public void start() {
         try {
-            Socket socket = new Socket("192.168.1.13", port);
+            Socket socket = new Socket("localhost", port);
             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -258,7 +255,7 @@ public class Worker {
             } else {
                 System.err.println("Did not receive proper assignment from Master.");
             }
-            // Load initial stores.
+            // Load partitioned stores.
             loadStores();
             System.out.println("Worker " + workerId + " connected to master on port " + port);
             while (true) {
@@ -286,6 +283,7 @@ public class Worker {
     }
 
     public void loadStores() {
+        // List the JSON files (one per store) under the resources folder (e.g., /jsonf/stores/)
         String[] storeFiles = {
                 "/jsonf/stores/PizzaWorld.json",
                 "/jsonf/stores/CoffeeCorner.json",
@@ -313,6 +311,7 @@ public class Worker {
                     sb.append(line);
                 }
                 String jsonContent = sb.toString();
+                // Each file now contains a single store JSON
                 Store store = gson.fromJson(jsonContent, Store.class);
                 if (store != null) {
                     allStores.add(store);
@@ -322,6 +321,7 @@ public class Worker {
             }
         }
 
+        // Partition the stores among workers as before.
         List<Store> partitionStores = new ArrayList<>();
         if (totalWorkers <= 0) {
             totalWorkers = 1;
@@ -339,6 +339,7 @@ public class Worker {
         }
         System.out.println("Worker " + workerId + " loaded " + partitionStores.size() + " stores out of " + allStores.size());
     }
+
 
     public static void main(String[] args) {
         Worker worker = new Worker(12345);
