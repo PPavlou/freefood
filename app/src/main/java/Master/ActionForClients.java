@@ -43,31 +43,18 @@ public class ActionForClients implements Runnable {
             System.out.println("Master received command: " + command);
             System.out.println("Master received data: " + data);
 
-            List<String> workerResponses = forwardToWorkers(command, data);
             String finalResponse;
             Gson gson = new Gson();
 
-            // For commands that are externally reduced (client: SEARCH, REVIEW, AGGREGATE_SALES_BY_PRODUCT_NAME;
-            // manager: LIST_STORES, DELETED_PRODUCTS), merge the reduced results.
-            if (command.equalsIgnoreCase("SEARCH") ||
-                    command.equalsIgnoreCase("REVIEW") ||
-                    command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME") ||
-                    command.equalsIgnoreCase("LIST_STORES") ||
-                    command.equalsIgnoreCase("DELETED_PRODUCTS")) {
-
-                Map<String, String> combined = new HashMap<>();
-                for (String response : workerResponses) {
-                    Type type = new TypeToken<Map<String, String>>() {}.getType();
-                    Map<String, String> partial = gson.fromJson(response, type);
-                    for (Map.Entry<String, String> entry : partial.entrySet()) {
-                        combined.merge(entry.getKey(), entry.getValue(), (v1, v2) -> v1 + "\n" + v2);
-                    }
-                }
-                finalResponse = gson.toJson(combined);
+            // If the message is coming from the reduce server...
+            if ("REDUCE_RESULT".equalsIgnoreCase(command)) {
+                // Directly use the reduced result as final response
+                finalResponse = data;
             } else {
-                // For other commands, simply concatenate the responses.
+                String workerResponses = gson.toJson(forwardToWorkers(command, data));
                 finalResponse = gson.toJson(workerResponses);
             }
+
             writer.println(finalResponse);
         } catch (IOException e) {
             System.err.println("ClientHandler error: " + e.getMessage());
@@ -76,6 +63,7 @@ public class ActionForClients implements Runnable {
             try { clientSocket.close(); } catch (IOException e) { }
         }
     }
+
 
     /**
      * Forwards the client/manager request to worker(s). If the command

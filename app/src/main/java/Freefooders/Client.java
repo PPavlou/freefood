@@ -15,7 +15,7 @@ import java.net.Socket;
  */
 public class Client {
     // The host and port where the MasterServer is running.
-    private static final String SERVER_HOST = "localhost";
+    private static final String SERVER_HOST = "192.168.1.13";
     private static final int SERVER_PORT = 12345;
 
     public static void main(String[] args) {
