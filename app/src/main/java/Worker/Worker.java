@@ -1,4 +1,3 @@
-
 package Worker;
 
 import com.google.gson.Gson;
@@ -37,7 +36,7 @@ public class Worker {
 
     /**
      * Processes a command by mapping over local stores.
-     * For commands that require reduction (client: SEARCH, REVIEW, AGGREGATE_SALES_BY_PRODUCT_NAME;
+     * For commands that require reduction (client: SEARCH, AGGREGATE_SALES_BY_PRODUCT_NAME;
      * manager: LIST_STORES, DELETED_PRODUCTS), the worker sends its mapping result to the external reduce server.
      */
     public String processCommand(String command, String data) {
@@ -45,7 +44,6 @@ public class Worker {
 
         // Determine if this command requires external reduction.
         boolean needsReduce = command.equalsIgnoreCase("SEARCH") ||
-                command.equalsIgnoreCase("REVIEW") ||
                 command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME") ||
                 command.equalsIgnoreCase("LIST_STORES") ||
                 command.equalsIgnoreCase("DELETED_PRODUCTS");
@@ -69,13 +67,12 @@ public class Worker {
             } else {
                 return mappingResult;
             }
-
-        } else if (command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
+        }
+        else if (command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
             Map<String, Store> localStores = storeManager.getAllStores();
             for (Map.Entry<String, Store> entry : localStores.entrySet()) {
                 input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
             }
-            // Use the new constructor to pass the aggregation query (data)
             ManagerCommandMapperReducer.CommandMapper mapper =
                     new ManagerCommandMapperReducer.CommandMapper(command, data, storeManager, productManager);
             List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
@@ -87,8 +84,7 @@ public class Worker {
             String mappingResult = gson.toJson(intermediate);
             return sendToReduceServer(command, mappingResult);
         }
-        else if (command.equalsIgnoreCase("REVIEW"))
-        {
+        else if (command.equalsIgnoreCase("REVIEW")) {
             // For REVIEW, process only the target store.
             String[] parts = data.split("\\|");
             if (parts.length < 2) {
@@ -110,7 +106,8 @@ public class Worker {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
             String mappingResult = gson.toJson(intermediate);
-            return sendToReduceServer(command, mappingResult);
+            // For REVIEW, do not reduce; return the mapping result directly.
+            return mappingResult;
         }
         else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
             // For PURCHASE_PRODUCT, process only the target store.
@@ -168,7 +165,6 @@ public class Worker {
                 return gson.toJson(intermediate);
             } else if (command.equalsIgnoreCase("LIST_STORES") ||
                     command.equalsIgnoreCase("DELETED_PRODUCTS")) {
-                // Build the mapping result only once.
                 List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
                 if (command.equalsIgnoreCase("LIST_STORES")) {
                     for (String storeName : storeManager.getAllStores().keySet()) {
@@ -208,97 +204,24 @@ public class Worker {
         }
     }
 
+    /**
+     * Sends mapping result to the reduce server.
+     * For commands requiring reduction, the expected count is the total number of workers.
+     */
     private String sendToReduceServer(String command, String mappingResult) {
-        int expectedCount = this.totalWorkers;  // total number of workers sending mapping outputs
+        int expectedCount = this.totalWorkers;
         String reduceServerHost = "192.168.1.14";  // adjust as needed
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
-            // Send the command.
             writer.println(command);
-            // Send the expected count.
             writer.println(String.valueOf(expectedCount));
-            // Send the mapping result JSON.
             writer.println(mappingResult);
-            // Do not wait for any response.
         } catch (IOException e) {
             e.printStackTrace();
             return "{\"error\":\"Error connecting to reduce server: " + e.getMessage() + "\"}";
         }
-        return "Mapping output sent to reduce server.";
-    }
-
-
-    /**
-     * Establishes a connection to the master and performs the initial handshake.
-     * Then it loads its assigned store partition.
-     */
-    public void start() {
-        try {
-            Socket socket = new Socket("192.168.1.14", port);
-            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-            // Send handshake.
-            writer.println("WORKER_HANDSHAKE");
-            String assignMsg = reader.readLine();
-            if (assignMsg != null && assignMsg.startsWith("WORKER_ASSIGN:")) {
-                String[] parts = assignMsg.split(":");
-                if (parts.length == 3) {
-                    try {
-                        workerId = Integer.parseInt(parts[1].trim());
-                        totalWorkers = Integer.parseInt(parts[2].trim());
-                        System.out.println("Worker assigned ID " + workerId + " out of " + totalWorkers);
-                    } catch (NumberFormatException e) {
-                        System.err.println("Invalid worker assignment format.");
-                    }
-                }
-            } else {
-                System.err.println("Did not receive proper assignment from Master.");
-            }
-            // Initial load of partitioned stores.
-            loadStores();
-            System.out.println("Worker " + workerId + " connected to master on port " + port);
-
-            while (true) {
-                String command = reader.readLine();
-                if (command == null) {
-                    System.out.println("Master closed connection.");
-                    break;
-                }
-                String data = reader.readLine();
-                if (data == null) {
-                    System.out.println("Master closed connection.");
-                    break;
-                }
-
-                // NEW: Handle reload command from master.
-                if ("RELOAD".equalsIgnoreCase(command.trim())) {
-                    try {
-                        int newTotalWorkers = Integer.parseInt(data.trim());
-                        this.totalWorkers = newTotalWorkers;
-                        // Reinitialize the store manager so that previous stores are cleared.
-                        storeManager = new StoreManager();
-                        loadStores();
-                        writer.println("Worker " + workerId + " reloaded " + storeManager.getAllStores().size() + " stores.");
-                        System.out.println("Worker " + workerId + " reloaded stores after update: " + storeManager.getAllStores().size());
-                    } catch (Exception e) {
-                        writer.println("Error reloading stores: " + e.getMessage());
-                    }
-                    continue;
-                }
-
-                System.out.println("Worker " + workerId + " received command: " + command);
-                System.out.println("Worker " + workerId + " received data: " + data);
-
-                String response = processCommand(command, data);
-                writer.println(response);
-            }
-            socket.close();
-        } catch (IOException e) {
-            System.err.println("Worker " + workerId + " error: " + e.getMessage());
-            e.printStackTrace();
-        }
+        return "{\"status\":\"Mapping output sent to reduce server.\"}";
     }
 
     /**
@@ -306,7 +229,6 @@ public class Worker {
      * assigned workerId and the current totalWorkers count.
      */
     public void loadStores() {
-        // List of JSON files (one per store) in the resources folder (e.g., /jsonf/stores/)
         String[] storeFiles = {
                 "/jsonf/stores/PizzaWorld.json",
                 "/jsonf/stores/CoffeeCorner.json",
@@ -334,7 +256,6 @@ public class Worker {
                     sb.append(line);
                 }
                 String jsonContent = sb.toString();
-                // Each file contains a single store JSON.
                 Store store = gson.fromJson(jsonContent, Store.class);
                 if (store != null) {
                     allStores.add(store);
@@ -344,7 +265,6 @@ public class Worker {
             }
         }
 
-        // Partition the stores based on updated totalWorkers value.
         List<Store> partitionStores = new ArrayList<>();
         if (totalWorkers <= 0) {
             totalWorkers = 1;
@@ -357,11 +277,77 @@ public class Worker {
                 partitionStores.add(s);
             }
         }
-        // Add the partitioned stores to the store manager.
         for (Store s : partitionStores) {
             storeManager.addStore(s);
         }
         System.out.println("Worker " + workerId + " loaded " + partitionStores.size() + " stores out of " + allStores.size());
+    }
+
+    public void start() {
+        try {
+            Socket socket = new Socket("192.168.1.14", port);
+            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            // Send handshake.
+            writer.println("WORKER_HANDSHAKE");
+            String assignMsg = reader.readLine();
+            if (assignMsg != null && assignMsg.startsWith("WORKER_ASSIGN:")) {
+                String[] parts = assignMsg.split(":");
+                if (parts.length == 3) {
+                    try {
+                        workerId = Integer.parseInt(parts[1].trim());
+                        totalWorkers = Integer.parseInt(parts[2].trim());
+                        System.out.println("Worker assigned ID " + workerId + " out of " + totalWorkers);
+                    } catch (NumberFormatException e) {
+                        System.err.println("Invalid worker assignment format.");
+                    }
+                }
+            } else {
+                System.err.println("Did not receive proper assignment from Master.");
+            }
+            // Load the worker's store partition.
+            loadStores();
+            System.out.println("Worker " + workerId + " connected to master on port " + port);
+
+            while (true) {
+                String command = reader.readLine();
+                if (command == null) {
+                    System.out.println("Master closed connection.");
+                    break;
+                }
+                String data = reader.readLine();
+                if (data == null) {
+                    System.out.println("Master closed connection.");
+                    break;
+                }
+
+                // Handle reload commands.
+                if ("RELOAD".equalsIgnoreCase(command.trim())) {
+                    try {
+                        int newTotalWorkers = Integer.parseInt(data.trim());
+                        this.totalWorkers = newTotalWorkers;
+                        storeManager = new StoreManager();
+                        loadStores();
+                        writer.println("RELOAD_RESPONSE:" + "Worker " + workerId + " reloaded " + storeManager.getAllStores().size() + " stores.");
+                        System.out.println("Worker " + workerId + " reloaded stores after update: " + storeManager.getAllStores().size());
+                    } catch (Exception e) {
+                        writer.println("RELOAD_RESPONSE:" + "Error reloading stores: " + e.getMessage());
+                    }
+                    continue;
+                }
+
+                System.out.println("Worker " + workerId + " received command: " + command);
+                System.out.println("Worker " + workerId + " received data: " + data);
+
+                String response = processCommand(command, data);
+                writer.println("CMD_RESPONSE:" + response);
+            }
+            socket.close();
+        } catch (IOException e) {
+            System.err.println("Worker " + workerId + " error: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     public static void main(String[] args) {

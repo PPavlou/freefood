@@ -1,12 +1,9 @@
 package Master;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.lang.reflect.Type;
 import java.net.Socket;
 import java.util.*;
 import model.Store;
@@ -38,15 +35,13 @@ public class ActionForClients implements Runnable {
             Gson gson = new Gson();
             String finalResponse = "";
 
-            // Define the set of commands that are reduced.
+            // For reduce commands—REVIEW has been removed so it is handled via direct response.
             Set<String> reduceCommands = new HashSet<>(Arrays.asList(
-                    "SEARCH", "REVIEW", "AGGREGATE_SALES_BY_PRODUCT_NAME",
+                    "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
                     "LIST_STORES", "DELETED_PRODUCTS"
             ));
 
             if (reduceCommands.contains(command.toUpperCase())) {
-                // Instead of aggregating the dummy responses from workers,
-                // wait for the actual aggregated result from the reduce server.
                 synchronized (MasterServer.reduceLock) {
                     while (!MasterServer.pendingReduceResults.containsKey(command)) {
                         try {
@@ -58,11 +53,9 @@ public class ActionForClients implements Runnable {
                         }
                     }
                     finalResponse = MasterServer.pendingReduceResults.get(command);
-                    // Optionally remove the result from the global map if not needed anymore.
                     MasterServer.pendingReduceResults.remove(command);
                 }
             } else {
-                // For non-reduce commands, aggregate the responses from the workers.
                 finalResponse = gson.toJson(workerResponses);
             }
             writer.println(finalResponse);
@@ -70,26 +63,24 @@ public class ActionForClients implements Runnable {
             System.err.println("ClientHandler error: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            try {
-                clientSocket.close();
-            } catch (IOException e) { }
+            try { clientSocket.close(); } catch (IOException e) { }
         }
     }
 
     /**
-     * Forwards the client/manager request to worker(s). If the command
-     * is directed (e.g., product modification commands), it selects a specific worker.
-     * If it's a broadcast command (e.g., SEARCH), it sends the request to all workers.
-     * Uses the dedicated monitor (MasterServer.workerAvailable) for waiting.
+     * Forwards the client/manager request to worker(s).
+     * For directed commands (including REVIEW), a specific worker is chosen.
+     * For broadcast commands, the request is sent to all workers.
+     * This method reads responses and only uses those starting with "CMD_RESPONSE:".
      */
     private List<String> forwardToWorkers(String command, String data) {
         List<String> responses = new ArrayList<>();
 
-        // Set of commands that are directed to one specific worker.
+        // Include REVIEW as a directed command.
         Set<String> directedCommands = new HashSet<>(Arrays.asList(
                 "ADD_STORE", "REMOVE_STORE", "ADD_PRODUCT", "REMOVE_PRODUCT",
                 "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT", "DECREMENT_PRODUCT_AMOUNT",
-                "PURCHASE_PRODUCT"
+                "PURCHASE_PRODUCT", "REVIEW"
         ));
 
         if (directedCommands.contains(command.toUpperCase())) {
@@ -99,7 +90,6 @@ public class ActionForClients implements Runnable {
                 return responses;
             }
             Socket workerSocket;
-            // Wait for at least one worker using the dedicated monitor.
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
@@ -115,20 +105,23 @@ public class ActionForClients implements Runnable {
                 workerSocket = workerSockets.get(index);
             }
             try {
-                // Synchronize on the worker socket to ensure exclusive access.
                 synchronized (workerSocket) {
                     PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-                    BufferedReader in = new BufferedReader(new InputStreamReader(workerSocket.getInputStream()));
+                    BufferedReader in = new BufferedReader(new java.io.InputStreamReader(workerSocket.getInputStream()));
                     out.println(command);
                     out.println(data);
-                    String resp = in.readLine();
-                    responses.add(resp);
+                    String line;
+                    while ((line = in.readLine()) != null) {
+                        if (line.startsWith("CMD_RESPONSE:")) {
+                            responses.add(line.substring("CMD_RESPONSE:".length()));
+                            break;
+                        }
+                    }
                 }
             } catch (IOException e) {
                 responses.add("Error with worker: " + e.getMessage());
             }
         } else {
-            // For broadcast commands: wait for at least one worker and then broadcast.
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
@@ -139,20 +132,24 @@ public class ActionForClients implements Runnable {
                         return responses;
                     }
                 }
-                // Use each worker in turn.
-                for (Socket workerSocket : workerSockets) {
-                    try {
-                        synchronized (workerSocket) {
-                            PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-                            BufferedReader in = new BufferedReader(new InputStreamReader(workerSocket.getInputStream()));
-                            out.println(command);
-                            out.println(data);
-                            String resp = in.readLine();
-                            responses.add(resp);
+            }
+            for (Socket workerSocket : workerSockets) {
+                try {
+                    synchronized (workerSocket) {
+                        PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
+                        BufferedReader in = new BufferedReader(new java.io.InputStreamReader(workerSocket.getInputStream()));
+                        out.println(command);
+                        out.println(data);
+                        String line;
+                        while ((line = in.readLine()) != null) {
+                            if (line.startsWith("CMD_RESPONSE:")) {
+                                responses.add(line.substring("CMD_RESPONSE:".length()));
+                                break;
+                            }
                         }
-                    } catch (IOException e) {
-                        responses.add("Error with worker: " + e.getMessage());
                     }
+                } catch (IOException e) {
+                    responses.add("Error with worker: " + e.getMessage());
                 }
             }
         }
@@ -161,19 +158,20 @@ public class ActionForClients implements Runnable {
 
     /**
      * Helper method to extract the store name from command data.
-     * For ADD_STORE, data is expected to be a JSON string representing a Store.
-     * For REMOVE_STORE, data is simply the store name.
-     * For product-related commands, data is in the format "storeName|otherParameters".
      */
     private String extractStoreName(String command, String data) {
         if (command.equalsIgnoreCase("ADD_STORE")) {
             try {
-                return new Gson().fromJson(data, model.Store.class).getStoreName();
+                return new com.google.gson.Gson().fromJson(data, model.Store.class).getStoreName();
             } catch (Exception e) {
                 return null;
             }
         } else if (command.equalsIgnoreCase("REMOVE_STORE")) {
             return data.trim();
+        } else if (command.equalsIgnoreCase("REVIEW")) {
+            // For REVIEW the data is expected in "StoreName|..." format.
+            String[] parts = data.split("\\|");
+            return parts.length >= 1 ? parts[0].trim() : null;
         } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
                 command.equalsIgnoreCase("REMOVE_PRODUCT") ||
                 command.equalsIgnoreCase("UPDATE_PRODUCT_AMOUNT") ||
@@ -187,7 +185,6 @@ public class ActionForClients implements Runnable {
                 return null;
             }
         }
-        // Broadcast commands have no specific store.
         return null;
     }
 }
