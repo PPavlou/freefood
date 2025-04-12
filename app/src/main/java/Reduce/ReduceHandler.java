@@ -1,4 +1,3 @@
-
 package Reduce;
 
 import com.google.gson.Gson;
@@ -18,8 +17,12 @@ import java.util.Map;
 public class ReduceHandler implements Runnable {
     private Socket socket;
 
-    // Use a plain HashMap to store aggregation jobs (keyed by the command)
+    // Global plain HashMap to store aggregation jobs keyed by command.
     private static final Map<String, AggregationJob> jobs = new HashMap<>();
+
+    // Master connection info (master already listens on port 12345).
+    private static final String MASTER_HOST = "192.168.1.14"; // adjust as needed
+    private static final int MASTER_PORT = 12345;
 
     public ReduceHandler(Socket socket) {
         this.socket = socket;
@@ -27,28 +30,30 @@ public class ReduceHandler implements Runnable {
 
     @Override
     public void run() {
-        try (
-                BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)
-        ) {
-            // First line: the command (e.g. LIST_STORES)
+        BufferedReader reader = null;
+        PrintWriter writer = null;
+        try {
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            writer = new PrintWriter(socket.getOutputStream(), true);
+
+            // 1st line: the command (e.g., "LIST_STORES")
             String command = reader.readLine();
             if (command == null) return;
 
-            // Second line: expected number of mapping outputs (from the worker)
+            // 2nd line: expected number of mapping outputs (number of workers)
             String expectedCountStr = reader.readLine();
             int expectedCount = Integer.parseInt(expectedCountStr.trim());
 
-            // Third line: the mapping result JSON sent by the worker
+            // 3rd line: the mapping result JSON from this worker
             String mappingJson = reader.readLine();
+
             System.out.println("Reduce server received command: " + command);
             System.out.println("Mapping result JSON: " + mappingJson);
 
             Gson gson = new Gson();
-            Type pairListType = new TypeToken<List<MapReduceFramework.Pair<String, String>>>() {}.getType();
-            List<MapReduceFramework.Pair<String, String>> pairs = gson.fromJson(mappingJson, pairListType);
+            Type listType = new TypeToken<List<MapReduceFramework.Pair<String, String>>>() {}.getType();
+            List<MapReduceFramework.Pair<String, String>> partialMapping = gson.fromJson(mappingJson, listType);
 
-            // Use a synchronized block on the jobs map to obtain (or create) the job for this command.
             AggregationJob job;
             synchronized (jobs) {
                 job = jobs.get(command);
@@ -59,23 +64,26 @@ public class ReduceHandler implements Runnable {
             }
 
             synchronized (job) {
-                // Add the worker's partial mapping outputs to the job.
-                job.partials.addAll(pairs);
-
-                // If we have not computed the final result and the number of received partials is at least the expected count,
-                // then perform the aggregation (the reduction step).
-                if (!job.isCompleted && job.receivedCount() >= job.expectedCount) {
+                // Add this worker's entire partial mapping to the job.
+                job.partials.add(partialMapping);
+                // If all expected partials have arrived and we haven't aggregated yet…
+                if (!job.isCompleted && job.partials.size() >= job.expectedCount) {
                     Map<String, String> reducedResults = new HashMap<>();
-                    for (MapReduceFramework.Pair<String, String> pair : job.partials) {
-                        // Merge by concatenating values with a comma.
-                        reducedResults.merge(pair.getKey(), pair.getValue(), (v1, v2) -> v1 + ", " + v2);
+                    for (List<MapReduceFramework.Pair<String, String>> partialList : job.partials) {
+                        for (MapReduceFramework.Pair<String, String> pair : partialList) {
+                            reducedResults.merge(pair.getKey(), pair.getValue(), (v1, v2) -> v1 + ", " + v2);
+                        }
                     }
                     job.finalResult = gson.toJson(reducedResults);
                     job.isCompleted = true;
                     job.notifyAll();
                     System.out.println("Reduced result computed for command " + command + ": " + job.finalResult);
+
+                    // Send the aggregated result directly to the master.
+                    sendAggregatedResultToMaster(command, job.finalResult);
+                    job.sentToMaster = true;
                 } else {
-                    // Otherwise wait until the job becomes complete.
+                    // Otherwise, wait until aggregation is complete.
                     while (!job.isCompleted) {
                         try {
                             job.wait();
@@ -84,35 +92,59 @@ public class ReduceHandler implements Runnable {
                         }
                     }
                 }
-                // Reply back with the same final aggregated result.
-                writer.println(job.finalResult);
-                System.out.println("Reduced result sent: " + job.finalResult);
+                // Reply an acknowledgment to the worker.
+                writer.println("ACK");
+                job.responseCount++;
+            }
+
+            // Once responses have been sent to all expected workers, remove the job.
+            synchronized (jobs) {
+                if (job.responseCount >= job.expectedCount) {
+                    jobs.remove(command);
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
             try {
+                if (reader != null) { reader.close(); }
+                if (writer != null) { writer.close(); }
                 socket.close();
-            } catch (IOException e) { }
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
         }
     }
 
-    // Inner class representing an aggregation job for a given command.
+    // Connects to the master on port 12345 and sends the aggregated result.
+    private void sendAggregatedResultToMaster(String command, String aggregatedResult) {
+        try (Socket masterSocket = new Socket(MASTER_HOST, MASTER_PORT);
+             PrintWriter masterWriter = new PrintWriter(masterSocket.getOutputStream(), true)) {
+            // We use a special header "REDUCE_RESULT" to distinguish reduce server messages.
+            masterWriter.println("REDUCE_RESULT");
+            masterWriter.println(command);
+            masterWriter.println(aggregatedResult);
+            System.out.println("Aggregated result sent to master: " + aggregatedResult);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Inner class representing an aggregation job.
     private static class AggregationJob {
         public final String command;
         public final int expectedCount;
-        public final List<MapReduceFramework.Pair<String, String>> partials;
+        // List of partial mapping outputs (each partial is a List of key-value pairs).
+        public final List<List<MapReduceFramework.Pair<String, String>>> partials;
         public boolean isCompleted = false;
         public String finalResult = null;
+        public boolean sentToMaster = false;
+        public int responseCount = 0;
 
         public AggregationJob(String command, int expectedCount) {
             this.command = command;
             this.expectedCount = expectedCount;
             this.partials = new ArrayList<>();
-        }
-
-        public int receivedCount() {
-            return partials.size();
         }
     }
 }
