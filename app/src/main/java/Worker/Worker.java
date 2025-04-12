@@ -89,7 +89,7 @@ public class Worker {
         }
         else if (command.equalsIgnoreCase("REVIEW"))
         {
-            // For PURCHASE_PRODUCT, process only the target store.
+            // For REVIEW, process only the target store.
             String[] parts = data.split("\\|");
             if (parts.length < 2) {
                 return gson.toJson(Collections.singletonList(
@@ -109,7 +109,6 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
-            // PURCHASE_PRODUCT does not require reduction.
             String mappingResult = gson.toJson(intermediate);
             return sendToReduceServer(command, mappingResult);
         }
@@ -134,15 +133,12 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
-            // PURCHASE_PRODUCT does not require reduction.
             return gson.toJson(intermediate);
-
         } else {
             // Manager commands.
             if (command.equalsIgnoreCase("ADD_STORE")) {
                 Store store = gson.fromJson(data, Store.class);
                 input.add(new MapReduceFramework.Pair<>(store.getStoreName(), store));
-                // (Then process with the manager mapper as before.)
                 ManagerCommandMapperReducer.CommandMapper mapper =
                         new ManagerCommandMapperReducer.CommandMapper(command, storeManager, productManager);
                 List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
@@ -172,8 +168,7 @@ public class Worker {
                 return gson.toJson(intermediate);
             } else if (command.equalsIgnoreCase("LIST_STORES") ||
                     command.equalsIgnoreCase("DELETED_PRODUCTS")) {
-                // Instead of iterating over each store and mapping repeatedly,
-                // build the mapping result just once.
+                // Build the mapping result only once.
                 List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
                 if (command.equalsIgnoreCase("LIST_STORES")) {
                     for (String storeName : storeManager.getAllStores().keySet()) {
@@ -214,7 +209,7 @@ public class Worker {
     }
 
     private String sendToReduceServer(String command, String mappingResult) {
-        String reduceServerHost = "localhost";
+        String reduceServerHost = "192.168.1.14";
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
@@ -230,11 +225,13 @@ public class Worker {
         }
     }
 
-    // start() and loadStores() remain unchanged.
-
+    /**
+     * Establishes a connection to the master and performs the initial handshake.
+     * Then it loads its assigned store partition.
+     */
     public void start() {
         try {
-            Socket socket = new Socket("localhost", port);
+            Socket socket = new Socket("192.168.1.14", port);
             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -255,9 +252,10 @@ public class Worker {
             } else {
                 System.err.println("Did not receive proper assignment from Master.");
             }
-            // Load partitioned stores.
+            // Initial load of partitioned stores.
             loadStores();
             System.out.println("Worker " + workerId + " connected to master on port " + port);
+
             while (true) {
                 String command = reader.readLine();
                 if (command == null) {
@@ -269,6 +267,23 @@ public class Worker {
                     System.out.println("Master closed connection.");
                     break;
                 }
+
+                // NEW: Handle reload command from master.
+                if ("RELOAD".equalsIgnoreCase(command.trim())) {
+                    try {
+                        int newTotalWorkers = Integer.parseInt(data.trim());
+                        this.totalWorkers = newTotalWorkers;
+                        // Reinitialize the store manager so that previous stores are cleared.
+                        storeManager = new StoreManager();
+                        loadStores();
+                        writer.println("Worker " + workerId + " reloaded " + storeManager.getAllStores().size() + " stores.");
+                        System.out.println("Worker " + workerId + " reloaded stores after update: " + storeManager.getAllStores().size());
+                    } catch (Exception e) {
+                        writer.println("Error reloading stores: " + e.getMessage());
+                    }
+                    continue;
+                }
+
                 System.out.println("Worker " + workerId + " received command: " + command);
                 System.out.println("Worker " + workerId + " received data: " + data);
 
@@ -282,8 +297,12 @@ public class Worker {
         }
     }
 
+    /**
+     * Loads store JSON files from resources and partitions them based on the worker's
+     * assigned workerId and the current totalWorkers count.
+     */
     public void loadStores() {
-        // List the JSON files (one per store) under the resources folder (e.g., /jsonf/stores/)
+        // List of JSON files (one per store) in the resources folder (e.g., /jsonf/stores/)
         String[] storeFiles = {
                 "/jsonf/stores/PizzaWorld.json",
                 "/jsonf/stores/CoffeeCorner.json",
@@ -311,7 +330,7 @@ public class Worker {
                     sb.append(line);
                 }
                 String jsonContent = sb.toString();
-                // Each file now contains a single store JSON
+                // Each file contains a single store JSON.
                 Store store = gson.fromJson(jsonContent, Store.class);
                 if (store != null) {
                     allStores.add(store);
@@ -321,7 +340,7 @@ public class Worker {
             }
         }
 
-        // Partition the stores among workers as before.
+        // Partition the stores based on updated totalWorkers value.
         List<Store> partitionStores = new ArrayList<>();
         if (totalWorkers <= 0) {
             totalWorkers = 1;
@@ -334,12 +353,12 @@ public class Worker {
                 partitionStores.add(s);
             }
         }
+        // Add the partitioned stores to the store manager.
         for (Store s : partitionStores) {
             storeManager.addStore(s);
         }
         System.out.println("Worker " + workerId + " loaded " + partitionStores.size() + " stores out of " + allStores.size());
     }
-
 
     public static void main(String[] args) {
         Worker worker = new Worker(12345);

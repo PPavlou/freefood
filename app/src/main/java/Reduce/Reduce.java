@@ -1,16 +1,8 @@
 package Reduce;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import mapreduce.ClientCommandMapperReducer;
-import mapreduce.ManagerCommandMapperReducer;
-import mapreduce.MapReduceFramework;
 import java.io.*;
-import java.lang.reflect.Type;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.*;
-
 
 public class Reduce {
     public static final int REDUCE_PORT = 23456;
@@ -28,5 +20,3 @@ public class Reduce {
         }
     }
 }
-
-

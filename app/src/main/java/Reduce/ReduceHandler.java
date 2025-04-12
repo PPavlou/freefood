@@ -23,7 +23,7 @@ class ReduceHandler implements Runnable {
     public ReduceHandler(Socket socket) {
         this.socket = socket;
     }
-    
+
     @Override
     public void run() {
         try (

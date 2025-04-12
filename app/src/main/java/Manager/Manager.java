@@ -262,7 +262,7 @@ public class Manager {
 
     public static void main(String[] args) {
         // Manager connects to Master on localhost:12345.
-        Manager manager = new Manager("localhost", 12345);
+        Manager manager = new Manager("192.168.1.14", 12345);
         manager.interactiveMenu();
     }
 }

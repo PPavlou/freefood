@@ -42,6 +42,18 @@ public class MasterServer {
                     synchronized (workerAvailable) {
                         workerSockets.add(socket);
                         workerAvailable.notifyAll();
+
+                        // After adding a new worker, broadcast a RELOAD command to all workers
+                        int currentWorkers = workerSockets.size();
+                        for (Socket s : workerSockets) {
+                            try {
+                                PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                                out.println("RELOAD");
+                                out.println(String.valueOf(currentWorkers)); // send updated total
+                            } catch (IOException ex) {
+                                System.err.println("Error sending reload command: " + ex.getMessage());
+                            }
+                        }
                     }
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
                 } else {
