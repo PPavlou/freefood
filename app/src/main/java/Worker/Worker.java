@@ -209,21 +209,29 @@ public class Worker {
     }
 
     private String sendToReduceServer(String command, String mappingResult) {
-        String reduceServerHost = "192.168.1.14";
+        // The expected count is the number of workers.
+        int expectedCount = this.totalWorkers;
+        String reduceServerHost = "192.168.1.14"; // Adjust the address as needed.
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-            writer.println(command);         // send the command
-            writer.println(mappingResult);     // send the mapping result as JSON
-            String reducedResponse = reader.readLine();
-            return reducedResponse;
+            // Send the command.
+            writer.println(command);
+            // Send the expected number (as a string).
+            writer.println(String.valueOf(expectedCount));
+            // Send the mapping result JSON.
+            writer.println(mappingResult);
+            // Read the final aggregated reduced result.
+            String finalResult = reader.readLine();
+            return finalResult;
         } catch (IOException e) {
             e.printStackTrace();
             return "{\"error\":\"Error connecting to reduce server: " + e.getMessage() + "\"}";
         }
     }
+
 
     /**
      * Establishes a connection to the master and performs the initial handshake.
