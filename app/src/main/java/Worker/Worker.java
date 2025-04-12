@@ -63,12 +63,7 @@ public class Worker {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
 
-            String mappingResult = gson.toJson(intermediate);
-            if (needsReduce) {
-                return sendToReduceServer(command, mappingResult);
-            } else {
-                return mappingResult;
-            }
+            return gson.toJson(intermediate);
 
         } else if (command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
             Map<String, Store> localStores = storeManager.getAllStores();
@@ -84,8 +79,7 @@ public class Worker {
                     intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
                 }
             }
-            String mappingResult = gson.toJson(intermediate);
-            return sendToReduceServer(command, mappingResult);
+            return gson.toJson(intermediate);
         }
         else if (command.equalsIgnoreCase("REVIEW"))
         {
@@ -109,8 +103,7 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
-            String mappingResult = gson.toJson(intermediate);
-            return sendToReduceServer(command, mappingResult);
+            return gson.toJson(intermediate);
         }
         else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
             // For PURCHASE_PRODUCT, process only the target store.
@@ -177,8 +170,7 @@ public class Worker {
                 } else { // DELETED_PRODUCTS
                     intermediate.add(new MapReduceFramework.Pair<>("DELETED_PRODUCTS", productManager.getDeletedProductsReport()));
                 }
-                String mappingResult = gson.toJson(intermediate);
-                return sendToReduceServer(command, mappingResult);
+                return gson.toJson(intermediate);
             } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
                     command.equalsIgnoreCase("REMOVE_PRODUCT") ||
                     command.equalsIgnoreCase("UPDATE_PRODUCT_AMOUNT") ||
@@ -207,31 +199,6 @@ public class Worker {
             }
         }
     }
-
-    private String sendToReduceServer(String command, String mappingResult) {
-        // The expected count is the number of workers.
-        int expectedCount = this.totalWorkers;
-        String reduceServerHost = "192.168.1.14"; // Adjust the address as needed.
-        int reduceServerPort = Reduce.REDUCE_PORT;
-        try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
-             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-
-            // Send the command.
-            writer.println(command);
-            // Send the expected number (as a string).
-            writer.println(String.valueOf(expectedCount));
-            // Send the mapping result JSON.
-            writer.println(mappingResult);
-            // Read the final aggregated reduced result.
-            String finalResult = reader.readLine();
-            return finalResult;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return "{\"error\":\"Error connecting to reduce server: " + e.getMessage() + "\"}";
-        }
-    }
-
 
     /**
      * Establishes a connection to the master and performs the initial handshake.

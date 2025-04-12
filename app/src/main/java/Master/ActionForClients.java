@@ -1,5 +1,6 @@
 package Master;
 
+import Reduce.Reduce;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.BufferedReader;
@@ -15,6 +16,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import mapreduce.MapReduceFramework;
 import model.Store;
 
 public class ActionForClients implements Runnable {
@@ -52,15 +55,16 @@ public class ActionForClients implements Runnable {
                     command.equalsIgnoreCase("LIST_STORES") ||
                     command.equalsIgnoreCase("DELETED_PRODUCTS")) {
 
-                Map<String, String> combined = new HashMap<>();
-                for (String response : workerResponses) {
-                    Type type = new TypeToken<Map<String, String>>() {}.getType();
-                    Map<String, String> partial = gson.fromJson(response, type);
-                    for (Map.Entry<String, String> entry : partial.entrySet()) {
-                        combined.merge(entry.getKey(), entry.getValue(), (v1, v2) -> v1 + "\n" + v2);
-                    }
+                // Parse and aggregate the mapping results from all workers.
+                List<MapReduceFramework.Pair<String, String>> combinedPairs = new ArrayList<>();
+                Type type = new TypeToken<List<MapReduceFramework.Pair<String, String>>>() {}.getType();
+                for (String mappingJson : workerResponses) {
+                    List<MapReduceFramework.Pair<String, String>> pairs = gson.fromJson(mappingJson, type);
+                    combinedPairs.addAll(pairs);
                 }
-                finalResponse = gson.toJson(combined);
+                String aggregatedMappingResult = gson.toJson(combinedPairs);
+
+                finalResponse = sendToReduceServer(command, aggregatedMappingResult);
             } else {
                 // For other commands, simply concatenate the responses.
                 finalResponse = gson.toJson(workerResponses);
@@ -73,6 +77,31 @@ public class ActionForClients implements Runnable {
             try { clientSocket.close(); } catch (IOException e) { }
         }
     }
+
+    /**
+     * Sends the mapping result to the Reduce server and waits for the reduced result.
+     * The Reduce server is expected to be running on a specific host and port.
+     */
+    private String sendToReduceServer(String command, String mappingResult) {
+        // Since the mapping results are already combined, we expect only one reduce input.
+        int expectedCount = 1;
+        String reduceServerHost = "192.168.1.14"; // Adjust as needed.
+        int reduceServerPort = Reduce.REDUCE_PORT;
+        try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
+             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+
+            writer.println(command);
+            writer.println(expectedCount);
+            writer.println(mappingResult);
+            String finalReducedResult = reader.readLine();
+            return finalReducedResult;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "{\"error\":\"Error connecting to reduce server: " + e.getMessage() + "\"}";
+        }
+    }
+
 
     /**
      * Forwards the client/manager request to worker(s). If the command
