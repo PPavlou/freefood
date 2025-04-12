@@ -6,6 +6,8 @@ import java.net.Socket;
 import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MasterServer {
     private static final int MASTER_PORT = 12345;
@@ -14,6 +16,11 @@ public class MasterServer {
     // A counter for worker registrations.
     private static int workerCount = 0;
     public static final Object workerAvailable = new Object();
+
+    // Global container for reduce results keyed by command.
+    public static final Map<String, String> pendingReduceResults = new HashMap<>();
+    // An object to synchronize waiting for reduce results.
+    public static final Object reduceLock = new Object();
 
     public static void main(String[] args) {
         ServerSocket serverSocket = null;
@@ -24,9 +31,9 @@ public class MasterServer {
                 Socket socket = serverSocket.accept();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-                socket.setSoTimeout(1000); // short timeout to read handshake
+                socket.setSoTimeout(1000); // short timeout to read the handshake
 
-                // Read the first line to determine if this is a worker handshake.
+                // Read the first line to determine the connection type.
                 String firstLine = reader.readLine();
                 if ("WORKER_HANDSHAKE".equals(firstLine)) {
                     // Assign a worker ID and update count.
@@ -38,12 +45,12 @@ public class MasterServer {
                     // Inform the worker of its assignment:
                     // Format: WORKER_ASSIGN:<assignedId>:<current total workers>
                     writer.println("WORKER_ASSIGN:" + assignedId + ":" + workerCount);
-                    // Add the socket to the list and notify available threads.
+                    // Add the socket to the list and notify waiting threads.
                     synchronized (workerAvailable) {
                         workerSockets.add(socket);
                         workerAvailable.notifyAll();
 
-                        // After adding a new worker, broadcast a RELOAD command to all workers
+                        // After adding a new worker, broadcast a RELOAD command to all workers.
                         int currentWorkers = workerSockets.size();
                         for (Socket s : workerSockets) {
                             try {
@@ -56,8 +63,24 @@ public class MasterServer {
                         }
                     }
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
-                } else {
-                    // This is a client (manager) connection.
+                }
+                // Handle incoming connections from the Reduce server.
+                else if ("REDUCE_RESULT".equals(firstLine)) {
+                    // Read the next two lines: the command and its aggregated result.
+                    String command = reader.readLine();
+                    String aggregatedResult = reader.readLine();
+                    System.out.println("Received REDUCE_RESULT for command: " + command);
+                    System.out.println("Aggregated result: " + aggregatedResult);
+                    // Store result in the global map and notify waiting threads.
+                    synchronized (reduceLock) {
+                        pendingReduceResults.put(command, aggregatedResult);
+                        reduceLock.notifyAll();
+                    }
+                    writer.println("ACK");
+                    socket.close();
+                }
+                // Otherwise, the connection is coming from a manager (client).
+                else {
                     ActionForClients clientHandler = new ActionForClients(socket, workerSockets, firstLine, reader);
                     new Thread(clientHandler).start();
                 }
@@ -67,7 +90,11 @@ public class MasterServer {
             e.printStackTrace();
         } finally {
             if (serverSocket != null) {
-                try { serverSocket.close(); } catch (IOException e) { }
+                try {
+                    serverSocket.close();
+                } catch (IOException e) {
+                    // Ignore closing exceptions.
+                }
             }
         }
     }

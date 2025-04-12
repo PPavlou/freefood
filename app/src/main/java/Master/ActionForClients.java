@@ -1,4 +1,3 @@
-
 package Master;
 
 import com.google.gson.Gson;
@@ -9,13 +8,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.lang.reflect.Type;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import model.Store;
 
 public class ActionForClients implements Runnable {
@@ -42,28 +35,34 @@ public class ActionForClients implements Runnable {
             System.out.println("Master received data: " + data);
 
             List<String> workerResponses = forwardToWorkers(command, data);
-            String finalResponse;
             Gson gson = new Gson();
+            String finalResponse = "";
 
-            // For commands that are externally reduced (client: SEARCH, REVIEW, AGGREGATE_SALES_BY_PRODUCT_NAME;
-            // manager: LIST_STORES, DELETED_PRODUCTS), merge the reduced results.
-            if (command.equalsIgnoreCase("SEARCH") ||
-                    command.equalsIgnoreCase("REVIEW") ||
-                    command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME") ||
-                    command.equalsIgnoreCase("LIST_STORES") ||
-                    command.equalsIgnoreCase("DELETED_PRODUCTS")) {
+            // Define the set of commands that are reduced.
+            Set<String> reduceCommands = new HashSet<>(Arrays.asList(
+                    "SEARCH", "REVIEW", "AGGREGATE_SALES_BY_PRODUCT_NAME",
+                    "LIST_STORES", "DELETED_PRODUCTS"
+            ));
 
-                Map<String, String> combined = new HashMap<>();
-                for (String response : workerResponses) {
-                    Type type = new TypeToken<Map<String, String>>() {}.getType();
-                    Map<String, String> partial = gson.fromJson(response, type);
-                    for (Map.Entry<String, String> entry : partial.entrySet()) {
-                        combined.merge(entry.getKey(), entry.getValue(), (v1, v2) -> v1 + "\n" + v2);
+            if (reduceCommands.contains(command.toUpperCase())) {
+                // Instead of aggregating the dummy responses from workers,
+                // wait for the actual aggregated result from the reduce server.
+                synchronized (MasterServer.reduceLock) {
+                    while (!MasterServer.pendingReduceResults.containsKey(command)) {
+                        try {
+                            MasterServer.reduceLock.wait(1000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            writer.println("{\"error\": \"Interrupted while waiting for reduce result.\"}");
+                            return;
+                        }
                     }
+                    finalResponse = MasterServer.pendingReduceResults.get(command);
+                    // Optionally remove the result from the global map if not needed anymore.
+                    MasterServer.pendingReduceResults.remove(command);
                 }
-                finalResponse = gson.toJson(combined);
             } else {
-                // For other commands, simply concatenate the responses.
+                // For non-reduce commands, aggregate the responses from the workers.
                 finalResponse = gson.toJson(workerResponses);
             }
             writer.println(finalResponse);
@@ -71,7 +70,9 @@ public class ActionForClients implements Runnable {
             System.err.println("ClientHandler error: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            try { clientSocket.close(); } catch (IOException e) { }
+            try {
+                clientSocket.close();
+            } catch (IOException e) { }
         }
     }
 
