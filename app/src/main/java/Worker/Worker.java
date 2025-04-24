@@ -210,7 +210,7 @@ public class Worker {
      */
     private String sendToReduceServer(String command, String mappingResult) {
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "192.168.1.14";  // adjust as needed
+        String reduceServerHost = "192.168.1.17";  // adjust as needed
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
@@ -285,7 +285,7 @@ public class Worker {
 
     public void start() {
         try {
-            Socket socket = new Socket("192.168.1.14", port);
+            Socket socket = new Socket("192.168.1.17", port);
             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 

@@ -33,9 +33,9 @@ public class ActionForClients implements Runnable {
 
             List<String> workerResponses = forwardToWorkers(command, data);
             Gson gson = new Gson();
-            String finalResponse = "";
+            String finalResponse;
 
-            // For reduce commands—REVIEW has been removed so it is handled via direct response.
+            // For reduce commands
             Set<String> reduceCommands = new HashSet<>(Arrays.asList(
                     "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
                     "LIST_STORES", "DELETED_PRODUCTS"
@@ -58,7 +58,16 @@ public class ActionForClients implements Runnable {
             } else {
                 finalResponse = gson.toJson(workerResponses);
             }
+
+            // Send response back to manager console
             writer.println(finalResponse);
+
+            // Trigger reload if stores changed
+            if ("ADD_STORE".equalsIgnoreCase(command)
+                    || "REMOVE_STORE".equalsIgnoreCase(command)) {
+                MasterServer.broadcastReload();
+            }
+
         } catch (IOException e) {
             System.err.println("ClientHandler error: " + e.getMessage());
             e.printStackTrace();
@@ -67,16 +76,9 @@ public class ActionForClients implements Runnable {
         }
     }
 
-    /**
-     * Forwards the client/manager request to worker(s).
-     * For directed commands (including REVIEW), a specific worker is chosen.
-     * For broadcast commands, the request is sent to all workers.
-     * This method reads responses and only uses those starting with "CMD_RESPONSE:".
-     */
     private List<String> forwardToWorkers(String command, String data) {
         List<String> responses = new ArrayList<>();
 
-        // Include REVIEW as a directed command.
         Set<String> directedCommands = new HashSet<>(Arrays.asList(
                 "ADD_STORE", "REMOVE_STORE", "ADD_PRODUCT", "REMOVE_PRODUCT",
                 "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT", "DECREMENT_PRODUCT_AMOUNT",
@@ -156,9 +158,6 @@ public class ActionForClients implements Runnable {
         return responses;
     }
 
-    /**
-     * Helper method to extract the store name from command data.
-     */
     private String extractStoreName(String command, String data) {
         if (command.equalsIgnoreCase("ADD_STORE")) {
             try {
@@ -169,7 +168,6 @@ public class ActionForClients implements Runnable {
         } else if (command.equalsIgnoreCase("REMOVE_STORE")) {
             return data.trim();
         } else if (command.equalsIgnoreCase("REVIEW")) {
-            // For REVIEW the data is expected in "StoreName|..." format.
             String[] parts = data.split("\\|");
             return parts.length >= 1 ? parts[0].trim() : null;
         } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
@@ -179,11 +177,7 @@ public class ActionForClients implements Runnable {
                 command.equalsIgnoreCase("DECREMENT_PRODUCT_AMOUNT") ||
                 command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
             String[] parts = data.split("\\|", 2);
-            if (parts.length >= 1) {
-                return parts[0].trim();
-            } else {
-                return null;
-            }
+            return (parts.length >= 1) ? parts[0].trim() : null;
         }
         return null;
     }

@@ -46,16 +46,7 @@ public class MasterServer {
                         workerSockets.add(socket);
                         workerAvailable.notifyAll();
                         // Broadcast a RELOAD command to all workers.
-                        int currentWorkers = workerSockets.size();
-                        for (Socket s : workerSockets) {
-                            try {
-                                PrintWriter out = new PrintWriter(s.getOutputStream(), true);
-                                out.println("RELOAD");
-                                out.println(String.valueOf(currentWorkers));
-                            } catch (IOException ex) {
-                                System.err.println("Error sending reload command: " + ex.getMessage());
-                            }
-                        }
+                        broadcastReload();
                     }
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
                 }
@@ -82,6 +73,24 @@ public class MasterServer {
         } finally {
             if (serverSocket != null) {
                 try { serverSocket.close(); } catch (IOException e) { }
+            }
+        }
+    }
+
+    /**
+     * Instructs all connected workers to reload their store partitions.
+     */
+    public static void broadcastReload() {
+        synchronized (workerAvailable) {
+            int currentWorkers = workerSockets.size();
+            for (Socket s : workerSockets) {
+                try {
+                    PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                    out.println("RELOAD");
+                    out.println(currentWorkers);
+                } catch (IOException ex) {
+                    System.err.println("Error sending reload command: " + ex.getMessage());
+                }
             }
         }
     }
