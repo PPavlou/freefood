@@ -1,11 +1,17 @@
 package Master;
 
-import com.google.gson.Gson;
 import java.io.BufferedReader;
-import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.io.IOException;
 import java.net.Socket;
-import java.util.*;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Arrays;
+
+import com.google.gson.Gson;
 import model.Store;
 
 public class ActionForClients implements Runnable {
@@ -35,7 +41,6 @@ public class ActionForClients implements Runnable {
             Gson gson = new Gson();
             String finalResponse;
 
-            // For reduce commands
             Set<String> reduceCommands = new HashSet<>(Arrays.asList(
                     "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
                     "LIST_STORES", "DELETED_PRODUCTS"
@@ -59,12 +64,11 @@ public class ActionForClients implements Runnable {
                 finalResponse = gson.toJson(workerResponses);
             }
 
-            // Send response back to manager console
+            // Send back to manager console
             writer.println(finalResponse);
 
-            // Trigger reload if stores changed
-            if ("ADD_STORE".equalsIgnoreCase(command)
-                    || "REMOVE_STORE".equalsIgnoreCase(command)) {
+            // Trigger workers to reload partitions on add/remove store
+            if ("ADD_STORE".equalsIgnoreCase(command) || "REMOVE_STORE".equalsIgnoreCase(command)) {
                 MasterServer.broadcastReload();
             }
 
@@ -72,7 +76,7 @@ public class ActionForClients implements Runnable {
             System.err.println("ClientHandler error: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            try { clientSocket.close(); } catch (IOException e) { }
+            try { clientSocket.close(); } catch (IOException e) { /* ignore */ }
         }
     }
 
@@ -80,15 +84,16 @@ public class ActionForClients implements Runnable {
         List<String> responses = new ArrayList<>();
 
         Set<String> directedCommands = new HashSet<>(Arrays.asList(
-                "ADD_STORE", "REMOVE_STORE", "ADD_PRODUCT", "REMOVE_PRODUCT",
+                "ADD_PRODUCT", "REMOVE_PRODUCT",
                 "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT", "DECREMENT_PRODUCT_AMOUNT",
                 "PURCHASE_PRODUCT", "REVIEW"
         ));
 
         if (directedCommands.contains(command.toUpperCase())) {
+            // Send to the single worker responsible for this store
             String storeName = extractStoreName(command, data);
             if (storeName == null || storeName.isEmpty()) {
-                responses.add("Error: Cannot extract store name from data for command " + command);
+                responses.add("Error: Cannot extract store name for command " + command);
                 return responses;
             }
             Socket workerSocket;
@@ -109,7 +114,9 @@ public class ActionForClients implements Runnable {
             try {
                 synchronized (workerSocket) {
                     PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-                    BufferedReader in = new BufferedReader(new java.io.InputStreamReader(workerSocket.getInputStream()));
+                    BufferedReader in = new BufferedReader(
+                            new InputStreamReader(workerSocket.getInputStream())
+                    );
                     out.println(command);
                     out.println(data);
                     String line;
@@ -123,14 +130,16 @@ public class ActionForClients implements Runnable {
             } catch (IOException e) {
                 responses.add("Error with worker: " + e.getMessage());
             }
+
         } else {
+            // Broadcast to all workers
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
                         MasterServer.workerAvailable.wait();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        responses.add("Error: Interrupted while waiting for a worker.");
+                        responses.add("Error: Interrupted while waiting for workers.");
                         return responses;
                     }
                 }
@@ -139,7 +148,9 @@ public class ActionForClients implements Runnable {
                 try {
                     synchronized (workerSocket) {
                         PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-                        BufferedReader in = new BufferedReader(new java.io.InputStreamReader(workerSocket.getInputStream()));
+                        BufferedReader in = new BufferedReader(
+                                new InputStreamReader(workerSocket.getInputStream())
+                        );
                         out.println(command);
                         out.println(data);
                         String line;
@@ -155,29 +166,30 @@ public class ActionForClients implements Runnable {
                 }
             }
         }
+
         return responses;
     }
 
     private String extractStoreName(String command, String data) {
-        if (command.equalsIgnoreCase("ADD_STORE")) {
+        if ("ADD_STORE".equalsIgnoreCase(command)) {
             try {
-                return new com.google.gson.Gson().fromJson(data, model.Store.class).getStoreName();
+                return new Gson().fromJson(data, Store.class).getStoreName();
             } catch (Exception e) {
                 return null;
             }
-        } else if (command.equalsIgnoreCase("REMOVE_STORE")) {
+        } else if ("REMOVE_STORE".equalsIgnoreCase(command)) {
             return data.trim();
-        } else if (command.equalsIgnoreCase("REVIEW")) {
+        } else if ("REVIEW".equalsIgnoreCase(command)) {
             String[] parts = data.split("\\|");
             return parts.length >= 1 ? parts[0].trim() : null;
-        } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
-                command.equalsIgnoreCase("REMOVE_PRODUCT") ||
-                command.equalsIgnoreCase("UPDATE_PRODUCT_AMOUNT") ||
-                command.equalsIgnoreCase("INCREMENT_PRODUCT_AMOUNT") ||
-                command.equalsIgnoreCase("DECREMENT_PRODUCT_AMOUNT") ||
-                command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
+        } else if ("ADD_PRODUCT".equalsIgnoreCase(command)
+                || "REMOVE_PRODUCT".equalsIgnoreCase(command)
+                || "UPDATE_PRODUCT_AMOUNT".equalsIgnoreCase(command)
+                || "INCREMENT_PRODUCT_AMOUNT".equalsIgnoreCase(command)
+                || "DECREMENT_PRODUCT_AMOUNT".equalsIgnoreCase(command)
+                || "PURCHASE_PRODUCT".equalsIgnoreCase(command)) {
             String[] parts = data.split("\\|", 2);
-            return (parts.length >= 1) ? parts[0].trim() : null;
+            return parts.length >= 1 ? parts[0].trim() : null;
         }
         return null;
     }
