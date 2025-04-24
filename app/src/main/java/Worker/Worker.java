@@ -45,6 +45,8 @@ public class Worker {
         // dynamic add/remove updates the full list, then await reload
         if (command.equalsIgnoreCase("ADD_STORE")) {
             Store store = gson.fromJson(data, Store.class);
+            store.setAveragePriceOfStore();
+            store.setAveragePriceOfStoreSymbol();
             allStores.add(store);
             return gson.toJson(Collections.singletonList(
                     new MapReduceFramework.Pair<>(store.getStoreName(),
