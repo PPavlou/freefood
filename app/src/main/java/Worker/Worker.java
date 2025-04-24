@@ -7,29 +7,29 @@ import mapreduce.ClientCommandMapperReducer;
 import mapreduce.ManagerCommandMapperReducer;
 import mapreduce.MapReduceFramework;
 import model.Store;
-import model.Product;
-import Reduce.Reduce;
-
 import java.io.*;
 import java.net.Socket;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import Reduce.Reduce;
 
 public class Worker {
-    private final int port;
+    private int port;
     private StoreManager storeManager;
     private ProductManager productManager;
+    // full store list for dynamic add/remove
     private final List<Store> allStores = new ArrayList<>();
-
     // Worker identification (set by handshake)
     private int workerId = -1;
     private int totalWorkers = 1;
-
-    private final Gson gson = new Gson();
+    private Gson gson = new Gson();
 
     public Worker(int port) {
         this.port = port;
-        this.storeManager = new StoreManager();
-        this.productManager = new ProductManager();
+        storeManager = new StoreManager();
+        productManager = new ProductManager();
     }
 
     public Worker() {
@@ -38,24 +38,20 @@ public class Worker {
 
     /**
      * Processes a command by mapping over local stores.
-     * Special-case ADD_STORE/REMOVE_STORE to mutate allStores,
-     * then partition on next RELOAD.
+     * For commands that require reduction (client: SEARCH, AGGREGATE_SALES_BY_PRODUCT_NAME;
+     * manager: LIST_STORES, DELETED_PRODUCTS), the worker sends its mapping result to the external reduce server.
      */
     public String processCommand(String command, String data) {
-        // Dynamic ADD_STORE
-        if ("ADD_STORE".equalsIgnoreCase(command)) {
+        // dynamic add/remove updates the full list, then await reload
+        if (command.equalsIgnoreCase("ADD_STORE")) {
             Store store = gson.fromJson(data, Store.class);
-            store.setAveragePriceOfStore();
-            store.setAveragePriceOfStoreSymbol();
             allStores.add(store);
             return gson.toJson(Collections.singletonList(
                     new MapReduceFramework.Pair<>(store.getStoreName(),
                             "Store " + store.getStoreName() + " added.")
             ));
         }
-
-        // Dynamic REMOVE_STORE
-        if ("REMOVE_STORE".equalsIgnoreCase(command)) {
+        if (command.equalsIgnoreCase("REMOVE_STORE")) {
             String storeName = data.trim();
             boolean removed = allStores.removeIf(s -> s.getStoreName().equals(storeName));
             String msg = removed
@@ -66,7 +62,7 @@ public class Worker {
             ));
         }
 
-        // All other commands: delegate to original logic
+        List<MapReduceFramework.Pair<String, Store>> input = new ArrayList<>();
 
         // Determine if this command requires external reduction.
         boolean needsReduce = command.equalsIgnoreCase("SEARCH") ||
@@ -74,63 +70,169 @@ public class Worker {
                 command.equalsIgnoreCase("LIST_STORES") ||
                 command.equalsIgnoreCase("DELETED_PRODUCTS");
 
-        // Build input list
-        List<MapReduceFramework.Pair<String, Store>> input = new ArrayList<>();
-        Map<String, Store> localStores = storeManager.getAllStores();
-        if (needsReduce) {
+        if (command.equalsIgnoreCase("SEARCH")) {
+            // Client commands: process over all local stores.
+            Map<String, Store> localStores = storeManager.getAllStores();
             for (Map.Entry<String, Store> entry : localStores.entrySet()) {
                 input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
             }
-        } else {
-            // directed commands will pick one store
-            String storeName = extractStoreName(command, data);
-            Store s = storeManager.getStore(storeName);
-            if (s != null) {
-                input.add(new MapReduceFramework.Pair<>(data, s));
-            }
-        }
-
-        List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
-        if (command.equalsIgnoreCase("SEARCH") || command.equalsIgnoreCase("REVIEW")||
-                command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
             ClientCommandMapperReducer.ClientCommandMapper mapper =
                     new ClientCommandMapperReducer.ClientCommandMapper(command, data, localStores);
+            List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
-        } else {
+
+            String mappingResult = gson.toJson(intermediate);
+            if (needsReduce) {
+                return sendToReduceServer(command, mappingResult);
+            } else {
+                return mappingResult;
+            }
+        }
+        else if (command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")) {
+            Map<String, Store> localStores = storeManager.getAllStores();
+            for (Map.Entry<String, Store> entry : localStores.entrySet()) {
+                input.add(new MapReduceFramework.Pair<>(entry.getKey(), entry.getValue()));
+            }
             ManagerCommandMapperReducer.CommandMapper mapper =
-                    command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME")
-                            ? new ManagerCommandMapperReducer.CommandMapper(command, data, storeManager, productManager)
-                            : new ManagerCommandMapperReducer.CommandMapper(command, storeManager, productManager);
+                    new ManagerCommandMapperReducer.CommandMapper(command, data, storeManager, productManager);
+            List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+            for (MapReduceFramework.Pair<String, Store> pair : input) {
+                if (pair.getValue() != null) {
+                    intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+                }
+            }
+            String mappingResult = gson.toJson(intermediate);
+            return sendToReduceServer(command, mappingResult);
+        }
+        else if (command.equalsIgnoreCase("REVIEW")) {
+            // For REVIEW, process only the target store.
+            String[] parts = data.split("\\|");
+            if (parts.length < 2) {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Invalid data for REVIEW.")));
+            }
+            String storeName = parts[0].trim();
+            Store store = storeManager.getStore(storeName);
+            if (store != null) {
+                input.add(new MapReduceFramework.Pair<>(data, store));
+            } else {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Store " + storeName + " not found.")));
+            }
+            ClientCommandMapperReducer.ClientCommandMapper mapper =
+                    new ClientCommandMapperReducer.ClientCommandMapper(command, data, storeManager.getAllStores());
+            List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
+            String mappingResult = gson.toJson(intermediate);
+            // For REVIEW, do not reduce; return the mapping result directly.
+            return mappingResult;
         }
-
-        String mappingJson = gson.toJson(intermediate);
-
-        if (needsReduce) {
-            return sendToReduceServer(command, mappingJson);
+        else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
+            // For PURCHASE_PRODUCT, process only the target store.
+            String[] parts = data.split("\\|");
+            if (parts.length < 3) {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Invalid data for PURCHASE_PRODUCT.")));
+            }
+            String storeName = parts[0].trim();
+            Store store = storeManager.getStore(storeName);
+            if (store != null) {
+                input.add(new MapReduceFramework.Pair<>(data, store));
+            } else {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Store " + storeName + " not found.")));
+            }
+            ClientCommandMapperReducer.ClientCommandMapper mapper =
+                    new ClientCommandMapperReducer.ClientCommandMapper(command, data, storeManager.getAllStores());
+            List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+            for (MapReduceFramework.Pair<String, Store> pair : input) {
+                intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+            }
+            return gson.toJson(intermediate);
         } else {
-            return mappingJson;
+            // Manager commands.
+            if (command.equalsIgnoreCase("ADD_STORE")) {
+                Store store = gson.fromJson(data, Store.class);
+                input.add(new MapReduceFramework.Pair<>(store.getStoreName(), store));
+                ManagerCommandMapperReducer.CommandMapper mapper =
+                        new ManagerCommandMapperReducer.CommandMapper(command, storeManager, productManager);
+                List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+                for (MapReduceFramework.Pair<String, Store> pair : input) {
+                    if (pair.getValue() != null) {
+                        intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+                    }
+                }
+                return gson.toJson(intermediate);
+            } else if (command.equalsIgnoreCase("REMOVE_STORE")) {
+                String storeName = data.trim();
+                Store store = storeManager.getStore(storeName);
+                if (store != null) {
+                    input.add(new MapReduceFramework.Pair<>(storeName, store));
+                } else {
+                    return gson.toJson(Collections.singletonList(
+                            new MapReduceFramework.Pair<>("ERROR", "Store " + storeName + " not found.")));
+                }
+                ManagerCommandMapperReducer.CommandMapper mapper =
+                        new ManagerCommandMapperReducer.CommandMapper(command, storeManager, productManager);
+                List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+                for (MapReduceFramework.Pair<String, Store> pair : input) {
+                    if (pair.getValue() != null) {
+                        intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+                    }
+                }
+                return gson.toJson(intermediate);
+            } else if (command.equalsIgnoreCase("LIST_STORES") ||
+                    command.equalsIgnoreCase("DELETED_PRODUCTS")) {
+                List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+                if (command.equalsIgnoreCase("LIST_STORES")) {
+                    for (String storeName : storeManager.getAllStores().keySet()) {
+                        intermediate.add(new MapReduceFramework.Pair<>("LIST_STORES", storeName));
+                    }
+                } else { // DELETED_PRODUCTS
+                    intermediate.add(new MapReduceFramework.Pair<>("DELETED_PRODUCTS", productManager.getDeletedProductsReport()));
+                }
+                String mappingResult = gson.toJson(intermediate);
+                return sendToReduceServer(command, mappingResult);
+            } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
+                    command.equalsIgnoreCase("REMOVE_PRODUCT") ||
+                    command.equalsIgnoreCase("UPDATE_PRODUCT_AMOUNT") ||
+                    command.equalsIgnoreCase("INCREMENT_PRODUCT_AMOUNT") ||
+                    command.equalsIgnoreCase("DECREMENT_PRODUCT_AMOUNT")) {
+                String storeName = data.split("\\|")[0].trim();
+                Store store = storeManager.getStore(storeName);
+                if (store != null) {
+                    input.add(new MapReduceFramework.Pair<>(data, store));
+                } else {
+                    return gson.toJson(Collections.singletonList(
+                            new MapReduceFramework.Pair<>("ERROR", "Store " + storeName + " not found.")));
+                }
+                ManagerCommandMapperReducer.CommandMapper mapper =
+                        new ManagerCommandMapperReducer.CommandMapper(command, storeManager, productManager);
+                List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+                for (MapReduceFramework.Pair<String, Store> pair : input) {
+                    if (pair.getValue() != null) {
+                        intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
+                    }
+                }
+                return gson.toJson(intermediate);
+            } else {
+                return gson.toJson(Collections.singletonList(
+                        new MapReduceFramework.Pair<>("ERROR", "Unknown command.")));
+            }
         }
     }
 
-    private String extractStoreName(String command, String data) {
-        if ("ADD_STORE".equalsIgnoreCase(command)) {
-            return gson.fromJson(data, Store.class).getStoreName();
-        } else if ("REMOVE_STORE".equalsIgnoreCase(command)) {
-            return data.trim();
-        } else {
-            String[] parts = data.split("\\|", 2);
-            return parts.length > 0 ? parts[0].trim() : null;
-        }
-    }
-
+    /**
+     * Sends mapping result to the reduce server.
+     * For commands requiring reduction, the expected count is the total number of workers.
+     */
     private String sendToReduceServer(String command, String mappingResult) {
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "192.168.1.17";
+        String reduceServerHost = "192.168.1.17";  // adjust as needed
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
@@ -145,24 +247,26 @@ public class Worker {
     }
 
     /**
-     * Load the *complete* set of stores from JSON into allStores.
+     * Loads store JSON files from resources and partitions them based on the worker's
+     * assigned workerId and the current totalWorkers count.
      */
-    private void loadInitialStores() {
-        String[] storeFiles = {
-                "/jsonf/stores/PizzaWorld.json",
-                "/jsonf/stores/CoffeeCorner.json",
-                "/jsonf/stores/SouvlakiKing.json",
-                "/jsonf/stores/BurgerZone.json",
-                "/jsonf/stores/BakeryDelight.json",
-                "/jsonf/stores/AsiaFusion.json",
-                "/jsonf/stores/TacoPlace.json",
-                "/jsonf/stores/SeaFoodExpress.json",
-                "/jsonf/stores/VeganGarden.json",
-                "/jsonf/stores/SweetTooth.json"
-        };
-
-        for (String fileName : storeFiles) {
-            try (InputStream is = Worker.class.getResourceAsStream(fileName)) {
+    public void loadStores() {
+        // initial JSON load
+        if (allStores.isEmpty()) {
+            String[] storeFiles = {
+                    "/jsonf/stores/PizzaWorld.json",
+                    "/jsonf/stores/CoffeeCorner.json",
+                    "/jsonf/stores/SouvlakiKing.json",
+                    "/jsonf/stores/BurgerZone.json",
+                    "/jsonf/stores/BakeryDelight.json",
+                    "/jsonf/stores/AsiaFusion.json",
+                    "/jsonf/stores/TacoPlace.json",
+                    "/jsonf/stores/SeaFoodExpress.json",
+                    "/jsonf/stores/VeganGarden.json",
+                    "/jsonf/stores/SweetTooth.json"
+            };
+            for (String fileName : storeFiles) {
+                InputStream is = Worker.class.getResourceAsStream(fileName);
                 if (is == null) {
                     System.err.println("Resource not found: " + fileName);
                     continue;
@@ -175,70 +279,93 @@ public class Worker {
                     }
                     Store store = gson.fromJson(sb.toString(), Store.class);
                     if (store != null) {
-                        store.setAveragePriceOfStore();
-                        store.setAveragePriceOfStoreSymbol();
                         allStores.add(store);
                     }
+                } catch (IOException e) {
+                    System.err.println("Error loading store from " + fileName + ": " + e.getMessage());
                 }
-            } catch (IOException e) {
-                System.err.println("Error loading store from " + fileName + ": " + e.getMessage());
             }
         }
-    }
-
-    /**
-     * Partition the current allStores list according to workerId and totalWorkers,
-     * and load just that slice into our StoreManager.
-     */
-    private void partitionStores() {
-        this.storeManager = new StoreManager();
+        // partition from full list
+        List<Store> partitionStores = new ArrayList<>();
+        if (totalWorkers <= 0) {
+            totalWorkers = 1;
+        }
         for (int i = 0; i < allStores.size(); i++) {
             if (i % totalWorkers == workerId) {
                 Store s = allStores.get(i);
-                storeManager.addStore(s);
+                s.setAveragePriceOfStore();
+                s.setAveragePriceOfStoreSymbol();
+                partitionStores.add(s);
             }
         }
-        System.out.println("Worker " + workerId +
-                " has " + storeManager.getAllStores().size() +
-                " stores out of " + allStores.size());
+        storeManager = new StoreManager();
+        for (Store s : partitionStores) {
+            storeManager.addStore(s);
+        }
+        System.out.println("Worker " + workerId + " loaded " + partitionStores.size() + " stores out of " + allStores.size());
     }
 
     public void start() {
-        try (Socket socket = new Socket("192.168.1.17", port);
-             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+        try {
+            Socket socket = new Socket("192.168.1.17", port);
+            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-            // 1) Handshake
+            // Send handshake.
             writer.println("WORKER_HANDSHAKE");
             String assignMsg = reader.readLine();
             if (assignMsg != null && assignMsg.startsWith("WORKER_ASSIGN:")) {
                 String[] parts = assignMsg.split(":");
-                workerId = Integer.parseInt(parts[1].trim());
-                totalWorkers = Integer.parseInt(parts[2].trim());
-                System.out.println("Worker assigned ID " + workerId + " of " + totalWorkers);
-            } else {
-                throw new IOException("Invalid WORKER_ASSIGN reply: " + assignMsg);
-            }
-
-            // 2) Initial load + partition
-            loadInitialStores();
-            partitionStores();
-
-            // 3) Main loop
-            String command;
-            while ((command = reader.readLine()) != null) {
-                String data = reader.readLine();
-                if ("RELOAD".equalsIgnoreCase(command.trim())) {
-                    totalWorkers = Integer.parseInt(data.trim());
-                    partitionStores();
-                    writer.println("RELOAD_RESPONSE:" +
-                            "Worker " + workerId + " reloaded " +
-                            storeManager.getAllStores().size() + " stores.");
-                } else {
-                    String response = processCommand(command, data);
-                    writer.println("CMD_RESPONSE:" + response);
+                if (parts.length == 3) {
+                    try {
+                        workerId = Integer.parseInt(parts[1].trim());
+                        totalWorkers = Integer.parseInt(parts[2].trim());
+                        System.out.println("Worker assigned ID " + workerId + " out of " + totalWorkers);
+                    } catch (NumberFormatException e) {
+                        System.err.println("Invalid worker assignment format.");
+                    }
                 }
+            } else {
+                System.err.println("Did not receive proper assignment from Master.");
             }
+            // Load the worker's store partition.
+            loadStores();
+            System.out.println("Worker " + workerId + " connected to master on port " + port);
+
+            while (true) {
+                String command = reader.readLine();
+                if (command == null) {
+                    System.out.println("Master closed connection.");
+                    break;
+                }
+                String data = reader.readLine();
+                if (data == null) {
+                    System.out.println("Master closed connection.");
+                    break;
+                }
+
+                // Handle reload commands.
+                if ("RELOAD".equalsIgnoreCase(command.trim())) {
+                    try {
+                        int newTotalWorkers = Integer.parseInt(data.trim());
+                        this.totalWorkers = newTotalWorkers;
+                        loadStores();
+                        writer.println("RELOAD_RESPONSE:" + "Worker " + workerId + " reloaded " + storeManager.getAllStores().size() + " stores.");
+                        System.out.println("Worker " + workerId + " reloaded stores after update: " + storeManager.getAllStores().size());
+                    } catch (Exception e) {
+                        writer.println("RELOAD_RESPONSE:" + "Error reloading stores: " + e.getMessage());
+                    }
+                    continue;
+                }
+
+                System.out.println("Worker " + workerId + " received command: " + command);
+                System.out.println("Worker " + workerId + " received data: " + data);
+
+                String response = processCommand(command, data);
+                writer.println("CMD_RESPONSE:" + response);
+            }
+            socket.close();
         } catch (IOException e) {
             System.err.println("Worker " + workerId + " error: " + e.getMessage());
             e.printStackTrace();
