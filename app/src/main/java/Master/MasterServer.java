@@ -9,6 +9,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.gson.Gson;
+import model.Store;
+
 public class MasterServer {
     private static final int MASTER_PORT = 12345;
     // Thread-safe list for worker sockets.
@@ -16,6 +19,7 @@ public class MasterServer {
     // A counter for worker registrations.
     private static int workerCount = 0;
     public static final Object workerAvailable = new Object();
+    public static final List<Store> dynamicStores = Collections.synchronizedList(new ArrayList<>());
 
     // Global container for reduce results keyed by command.
     public static final Map<String, String> pendingReduceResults = new HashMap<>();
@@ -41,15 +45,29 @@ public class MasterServer {
                         assignedId = workerCount;
                         workerCount++;
                     }
+                    // Tell the newcomer its slot and live count
                     writer.println("WORKER_ASSIGN:" + assignedId + ":" + workerCount);
+
+                    // REPLAY any stores that were added dynamically before this worker arrived
+                    //    (so it builds the same allStores list as the veterans)
+                    synchronized (dynamicStores) {
+                        Gson gson = new Gson();
+                        for (Store s : dynamicStores) {
+                            writer.println("ADD_STORE");
+                            writer.println(gson.toJson(s));
+                        }
+                    }
+
+                    // Now add it to the live list and trigger the partitioning reload
                     synchronized (workerAvailable) {
                         workerSockets.add(socket);
                         workerAvailable.notifyAll();
-                        // Broadcast a RELOAD command to all workers.
                         broadcastReload();
                     }
+
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
                 }
+
                 else if ("REDUCE_RESULT".equals(firstLine)) {
                     String command = reader.readLine();
                     String aggregatedResult = reader.readLine();

@@ -68,9 +68,23 @@ public class ActionForClients implements Runnable {
             writer.println(finalResponse);
 
             // Trigger workers to reload partitions on add/remove store
-            if ("ADD_STORE".equalsIgnoreCase(command) || "REMOVE_STORE".equalsIgnoreCase(command)) {
+            if ("ADD_STORE".equalsIgnoreCase(command) ||
+                    "REMOVE_STORE".equalsIgnoreCase(command)) {
+
+                if ("ADD_STORE".equalsIgnoreCase(command)) {
+                    // parse and remember this new store
+                    Store s = gson.fromJson(data, Store.class);
+                    MasterServer.dynamicStores.add(s);
+                } else {
+                    // forget any store with that name
+                    MasterServer.dynamicStores
+                            .removeIf(s -> s.getStoreName().equals(data.trim()));
+                }
+
+                // now tell _all_ workers (including any newcomers) to reload
                 MasterServer.broadcastReload();
             }
+
 
         } catch (IOException e) {
             System.err.println("ClientHandler error: " + e.getMessage());
