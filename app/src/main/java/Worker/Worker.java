@@ -25,6 +25,8 @@ public class Worker {
     private int workerId = -1;
     private int totalWorkers = 1;
     private Gson gson = new Gson();
+    private PrintWriter writer;
+    private Socket socket;
 
     public Worker(int port) {
         this.port = port;
@@ -310,8 +312,8 @@ public class Worker {
 
     public void start() {
         try {
-            Socket socket = new Socket("localhost", port);
-            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+            socket = new Socket("localhost", port);
+            writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
             // Send handshake.
@@ -335,6 +337,8 @@ public class Worker {
             loadStores();
             System.out.println("Worker " + workerId + " connected to master on port " + port);
 
+            checkKeyboardInputForShutdown();
+
             while (true) {
                 String command = reader.readLine();
                 if (command == null) {
@@ -352,6 +356,7 @@ public class Worker {
                     try {
                         int newTotalWorkers = Integer.parseInt(data.trim());
                         this.totalWorkers = newTotalWorkers;
+                        System.out.println("Total Workers: "+totalWorkers);
                         loadStores();
                         writer.println("RELOAD_RESPONSE:" + "Worker " + workerId + " reloaded " + storeManager.getAllStores().size() + " stores.");
                         System.out.println("Worker " + workerId + " reloaded stores after update: " + storeManager.getAllStores().size());
@@ -374,8 +379,47 @@ public class Worker {
         }
     }
 
+    private void sendTerminationCommand() throws IOException {
+        try {
+            try (Socket socketTemp = new Socket("localhost", port);
+                 PrintWriter writerTemp = new PrintWriter(socketTemp.getOutputStream(), true)) { // Auto-flush enabled
+                writerTemp.println("WORKER_SHUTDOWN:" + workerId);
+                totalWorkers--;
+                System.out.println("Shutdown notification sent on new connection.");
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to send shutdown notification: " + e.getMessage());
+        }
+    }
+
+    private void checkKeyboardInputForShutdown()
+    {
+        new Thread(() -> {
+            BufferedReader terminalReader = new BufferedReader(new InputStreamReader(System.in));
+            while (true) {
+                try {
+                    String cmd = terminalReader.readLine();
+                    if ("SHUTDOWN".equalsIgnoreCase(cmd.trim())) {
+                        System.out.println("Manual shutdown command received.");
+                        System.exit(0);
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error reading from terminal: " + e.getMessage());
+                }
+            }
+        }).start();
+    }
+
     public static void main(String[] args) {
         Worker worker = new Worker(12345);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutdown hook triggered for Worker");
+            try {
+                worker.sendTerminationCommand();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }));
         worker.start();
     }
 }

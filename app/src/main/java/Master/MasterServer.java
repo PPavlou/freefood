@@ -16,6 +16,8 @@ public class MasterServer {
     private static final int MASTER_PORT = 12345;
     // Thread-safe list for worker sockets.
     public static List<Socket> workerSockets = Collections.synchronizedList(new ArrayList<>());
+    public static final Map<Integer,Socket> workerSocketsById =
+            Collections.synchronizedMap(new HashMap<>());
     // A counter for worker registrations.
     private static int workerCount = 0;
     public static final Object workerAvailable = new Object();
@@ -61,11 +63,46 @@ public class MasterServer {
                     // Now add it to the live list and trigger the partitioning reload
                     synchronized (workerAvailable) {
                         workerSockets.add(socket);
+                        workerSocketsById.put(assignedId, socket);
                         workerAvailable.notifyAll();
                         broadcastReload();
                     }
 
                     System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
+                }
+                else if (firstLine != null && (firstLine.contains("WORKER_SHUTDOWN:"))) {
+                    // Expect the format: WORKER_SHUTDOWN:<id>
+                    String[] parts = firstLine.split(":");
+                    if (parts.length != 2) {
+                        System.err.println("Invalid WORKER_SHUTDOWN message: " + firstLine);
+                        continue;
+                    }
+                    int id = Integer.parseInt(parts[1]);
+
+                    // decrement global worker count
+                    synchronized (MasterServer.class) {
+                        workerCount--;
+                    }
+                    System.out.println("WORKER_SHUTDOWN – ID=" + id + "  CURRENT WORKER COUNT: " + workerCount);
+
+                    synchronized (workerAvailable) {
+                        // look up the original Socket you stored for this ID
+                        Socket toRemove = workerSocketsById.remove(id);
+                        if (toRemove != null) {
+                            workerSockets.remove(toRemove);
+                            System.out.println("Removed worker " + id + " at " + toRemove.getRemoteSocketAddress());
+                            try {
+                                toRemove.close();
+                            } catch (IOException ex) {
+                                System.err.println("Error closing socket for worker " + id + ": " + ex.getMessage());
+                            }
+                        } else {
+                            System.err.println("No socket found for WORKER_SHUTDOWN ID=" + id);
+                        }
+
+                        workerAvailable.notifyAll();
+                        broadcastReload();
+                    }
                 }
 
                 else if ("REDUCE_RESULT".equals(firstLine)) {
