@@ -6,6 +6,9 @@ import java.util.*;
 import com.google.gson.*;
 import model.Store;
 import model.Product;
+import java.util.InputMismatchException;
+import java.util.Scanner;
+import java.util.function.Function;
 
 public class Manager {
     private String masterHost;
@@ -56,6 +59,27 @@ public class Manager {
         }
     }
 
+    public <T extends Number> T getValidNumber(Function<Scanner, T> inputMethod, String typeName) {
+        Scanner scanner = new Scanner(System.in);
+        T value = null;
+        boolean validInput = false;
+
+        while (!validInput) {
+            try {
+                value = inputMethod.apply(scanner);
+                if (value.doubleValue()>=0)
+                    validInput = true;
+                else
+                    System.out.print("Please enter a " + typeName + " >=0: ");
+            } catch (InputMismatchException e) {
+                System.out.print("Please enter a valid " + typeName + ": ");
+                scanner.next(); // Consume the invalid input
+            }
+        }
+
+        return value;
+    }
+
     /**
      * Provides an interactive console for Manager operations.
      */
@@ -90,21 +114,25 @@ public class Manager {
                     System.out.print("Store Name: ");
                     String storeName = scanner.nextLine();
                     System.out.print("Latitude: ");
-                    double latitude = Double.parseDouble(scanner.nextLine());
+                    double latitude = getValidNumber(Scanner::nextDouble, "number");
                     System.out.print("Longitude: ");
-                    double longitude = Double.parseDouble(scanner.nextLine());
+                    double longitude = getValidNumber(Scanner::nextDouble, "number");
                     System.out.print("Food Category: ");
                     String foodCategory = scanner.nextLine();
                     System.out.print("Rating (stars, 1-5): ");
-                    int stars = Integer.parseInt(scanner.nextLine());
+                    int stars = getValidNumber(Scanner::nextInt, "integer");
+                    while(stars<1 || stars >5){
+                        System.out.print("Rating (stars, 1-5): ");
+                        stars = getValidNumber(Scanner::nextInt, "integer");
+                    }
                     System.out.print("Number of Votes: ");
-                    int noOfVotes = Integer.parseInt(scanner.nextLine());
+                    int noOfVotes = getValidNumber(Scanner::nextInt, "integer");
                     System.out.print("Logo Path: ");
                     String logoPath = scanner.nextLine();
 
                     List<Product> products = new ArrayList<>();
                     System.out.print("Number of products to add: ");
-                    int productCount = Integer.parseInt(scanner.nextLine());
+                    int productCount = getValidNumber(Scanner::nextInt, "integer");
                     for (int i = 0; i < productCount; i++) {
                         System.out.println("Enter details for product " + (i + 1) + ":");
                         System.out.print("  Product Name: ");
@@ -112,9 +140,9 @@ public class Manager {
                         System.out.print("  Product Type: ");
                         String prodType = scanner.nextLine();
                         System.out.print("  Available Amount: ");
-                        int available = Integer.parseInt(scanner.nextLine());
+                        int available = getValidNumber(Scanner::nextInt, "integer");
                         System.out.print("  Price: ");
-                        double price = Double.parseDouble(scanner.nextLine());
+                        double price = getValidNumber(Scanner::nextDouble, "number");
                         products.add(new Product(prodName, prodType, available, price));
                     }
                     Store store = new Store();
@@ -154,9 +182,9 @@ public class Manager {
                     System.out.print("Product Type: ");
                     String productType = scanner.nextLine();
                     System.out.print("Available Amount: ");
-                    int availableAmount = Integer.parseInt(scanner.nextLine());
+                    int availableAmount = getValidNumber(Scanner::nextInt, "integer");
                     System.out.print("Price: ");
-                    double productPrice = Double.parseDouble(scanner.nextLine());
+                    double productPrice = getValidNumber(Scanner::nextDouble, "number");
                     Product product = new Product(productName, productType, availableAmount, productPrice);
                     String productJson = gson.toJson(product);
                     System.out.println("Sending ADD_PRODUCT command...");
@@ -262,7 +290,7 @@ public class Manager {
 
     public static void main(String[] args) {
         // Manager connects to Master on localhost:12345.
-        Manager manager = new Manager("192.168.1.17", 12345);
+        Manager manager = new Manager("localhost", 12345);
         manager.interactiveMenu();
     }
 }
