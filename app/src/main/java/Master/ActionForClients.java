@@ -111,6 +111,10 @@ public class ActionForClients implements Runnable {
                 return responses;
             }
             Socket workerSocket;
+            int workerCountLocal = workerSockets.size();
+            int index = Math.abs(storeName.hashCode()) % workerCountLocal;
+            workerSocket = workerSockets.get(index);
+
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
@@ -121,9 +125,6 @@ public class ActionForClients implements Runnable {
                         return responses;
                     }
                 }
-                int workerCountLocal = workerSockets.size();
-                int index = Math.abs(storeName.hashCode()) % workerCountLocal;
-                workerSocket = workerSockets.get(index);
             }
             try {
                 synchronized (workerSocket) {
@@ -140,6 +141,15 @@ public class ActionForClients implements Runnable {
                             break;
                         }
                     }
+
+                    int replicationFactor = 2;
+                    List<Integer> replicaIds = new ArrayList<>();
+                    for (int r = 1; r < replicationFactor; r++) {
+                        replicaIds.add((index + r) % workerCountLocal);
+                    }
+                    // build the same “command|data” payload
+                    String payload = command + "|" + data;
+                    MasterServer.broadcastToReplicas(replicaIds, payload);
                 }
             } catch (IOException e) {
                 responses.add("Error with worker: " + e.getMessage());

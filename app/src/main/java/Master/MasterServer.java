@@ -149,4 +149,29 @@ public class MasterServer {
             }
         }
     }
+
+    /**
+     * Broadcasts a message to a specific set of worker IDs (e.g., a primary and its replicas).
+     *
+     * @param workerIds List of worker IDs (primary + replicas) to send the message.
+     * @param message The message to send.
+     */
+    public static void broadcastToReplicas(List<Integer> workerIds, String message) {
+        synchronized (workerAvailable) {
+            for (Integer workerId : workerIds) {
+                Socket workerSocket = workerSocketsById.get(workerId);
+                if (workerSocket != null && !workerSocket.isClosed()) {
+                    try {
+                        PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
+                        out.println(message);
+                    } catch (IOException ex) {
+                        System.err.println("Error sending to worker " + workerId + ": " + ex.getMessage());
+                    }
+                } else {
+                    System.err.println("Worker socket is null or closed for ID: " + workerId);
+                }
+            }
+        }
+    }
+
 }
