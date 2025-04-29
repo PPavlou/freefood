@@ -99,7 +99,7 @@ public class MasterServer {
                         } else {
                             System.err.println("No socket found for WORKER_SHUTDOWN ID=" + id);
                         }
-
+                        shiftWorkerIdsDown(id);
                         workerAvailable.notifyAll();
                         broadcastReload();
                     }
@@ -174,4 +174,25 @@ public class MasterServer {
         }
     }
 
+    private static void shiftWorkerIdsDown(int removedId) {
+        List<Integer> toShift = new ArrayList<>();
+        for (Integer oldId : new ArrayList<>(workerSocketsById.keySet())) {
+            if (oldId > removedId) {
+                toShift.add(oldId);
+            }
+        }
+        for (Integer oldId : toShift) {
+            Socket sock = workerSocketsById.remove(oldId);
+            int newId = oldId - 1;
+            workerSocketsById.put(newId, sock);
+            try {
+                PrintWriter out = new PrintWriter(sock.getOutputStream(), true);
+                out.println("DECREMENT_ID");
+                out.println(newId + ":" + workerCount);
+                System.out.println("DECREASE ID FOR WORKER: "+oldId);
+            } catch (IOException ex) {
+                System.err.println("Failed to tell worker " + oldId + " to decrement ID: " + ex.getMessage());
+            }
+        }
+    }
 }

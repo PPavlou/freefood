@@ -364,8 +364,17 @@ public class Worker {
                         writer.println("RELOAD_RESPONSE:" + "Error reloading stores: " + e.getMessage());
                     }
                     continue;
-                }
+                } else if ("DECREMENT_ID".equalsIgnoreCase(command.trim())) {
+                    String[] parts = data.split(":");
+                    int newId    = Integer.parseInt(parts[0].trim());
+                    int newTotal = Integer.parseInt(parts[1].trim());
 
+                    this.workerId     = newId;
+                    this.totalWorkers = newTotal;
+                    System.out.println("Worker changed id to: " + workerId);
+
+                    continue;
+                }
                 System.out.println("Worker " + workerId + " received command: " + command);
                 System.out.println("Worker " + workerId + " received data: " + data);
 
