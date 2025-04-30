@@ -174,25 +174,30 @@ public class MasterServer {
         }
     }
 
+    /**
+     * After a worker goes offline, for every remaining worker whose
+     * oldId > removedId, shift them down by one and tell them to
+     * decrement their own workerId.
+     */
     private static void shiftWorkerIdsDown(int removedId) {
-        List<Integer> toShift = new ArrayList<>();
+        Map<Integer, Socket> updatedAssignments = new HashMap<>();
+
         for (Integer oldId : new ArrayList<>(workerSocketsById.keySet())) {
             if (oldId > removedId) {
-                toShift.add(oldId);
+                Socket sock = workerSocketsById.remove(oldId);
+                int newId = oldId - 1;
+                updatedAssignments.put(newId, sock);
+                try {
+                    PrintWriter out = new PrintWriter(sock.getOutputStream(), true);
+                    out.println("DECREMENT_ID");
+                    out.println(newId + ":" + workerCount);
+                    System.out.println("DECREASE ID FOR WORKER: "+oldId);
+                } catch (IOException ex) {
+                    System.err.println("Failed to notify worker " + oldId + " of new ID: " + ex.getMessage());
+                }
             }
         }
-        for (Integer oldId : toShift) {
-            Socket sock = workerSocketsById.remove(oldId);
-            int newId = oldId - 1;
-            workerSocketsById.put(newId, sock);
-            try {
-                PrintWriter out = new PrintWriter(sock.getOutputStream(), true);
-                out.println("DECREMENT_ID");
-                out.println(newId + ":" + workerCount);
-                System.out.println("DECREASE ID FOR WORKER: "+oldId);
-            } catch (IOException ex) {
-                System.err.println("Failed to tell worker " + oldId + " to decrement ID: " + ex.getMessage());
-            }
-        }
+        workerSocketsById.putAll(updatedAssignments);
     }
+
 }
