@@ -140,6 +140,10 @@ public class ActionForClients implements Runnable {
                 responses.add("Error: Cannot extract store name for command " + command);
                 return responses;
             }
+            int workerCount;
+            int index;
+            Socket workerSocket;
+
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
@@ -150,10 +154,10 @@ public class ActionForClients implements Runnable {
                         return responses;
                     }
                 }
+                workerCount = workerSockets.size();
+                index       = Math.abs(storeName.hashCode()) % workerCount;
+                workerSocket = workerSockets.get(index);
             }
-            int workerCount = workerSockets.size();
-            int index       = Math.abs(storeName.hashCode()) % workerCount;
-            Socket workerSocket = workerSockets.get(index);
 
             try {
                 synchronized (workerSocket) {
@@ -172,13 +176,17 @@ public class ActionForClients implements Runnable {
                         }
                     }
 
-                    int replicationFactor = 2;
-                    List<Integer> replicaIds = new ArrayList<>();
-                    for (int r = 1; r < replicationFactor; r++) {
-                        replicaIds.add((index + r) % workerCount);
+                    if (workerCount>1 && workerSocket.isClosed()) {
+                        int replicationFactor = 2;
+                        List<Integer> replicaIds = new ArrayList<>();
+                        for (int r = 1; r < replicationFactor; r++) {
+                            replicaIds.add((index + r) % workerCount);
+                        }
+                        // build the same “command|data” payload
+                        String payload = command + "|" + data;
+
+                        MasterServer.broadcastToReplicas(replicaIds, payload);
                     }
-                    String payload = command + "|" + data;
-                    MasterServer.broadcastToReplicas(replicaIds, payload);
                 }
             } catch (IOException e) {
                 responses.add("Error with worker: " + e.getMessage());
