@@ -7,8 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ClientCommandMapperReducer contains both the mapper and reducer for client commands.
- *
+ * Contains mapper and reducer implementations for processing client commands.
  * Supported commands:
  *   - SEARCH: expects data "filterKey=filterValue" (e.g., "FoodCategory=pizzeria")
  *   - REVIEW: expects data "storeName|review"
@@ -17,20 +16,24 @@ import java.util.Map;
  */
 public class ClientCommandMapperReducer {
 
+    /**
+     * Mapper for client commands. Applies filters or updates on store objects based on the command
+     * and emits (storeName, result) pairs.
+     */
     public static class ClientCommandMapper implements MapReduceFramework.Mapper<String, Store, String, String> {
         private String command;
         private Gson gson = new Gson();
-        // For SEARCH only.
         private String filterKey;
         private String filterValue;
         private String data;
-        // Local store map (provided by the worker)
         private Map<String, Store> localStores;
 
         /**
-         * @param command     The client command ("SEARCH", "REVIEW", "AGGREGATE_SALES_BY_PRODUCT_NAME", or "PURCHASE_PRODUCT").
-         * @param data        The raw data string from the client.
-         * @param localStores The local store map.
+         * Creates a mapper for the given command with its data and the local store map.
+         *
+         * @param command     the client command ("SEARCH", "REVIEW", "AGGREGATE_SALES_BY_PRODUCT_NAME", or "PURCHASE_PRODUCT")
+         * @param data        the raw data string from the client
+         * @param localStores the map of storeName to Store objects for processing
          */
         public ClientCommandMapper(String command, String data, Map<String, Store> localStores) {
             this.command = command;
@@ -45,6 +48,13 @@ public class ClientCommandMapperReducer {
             }
         }
 
+        /**
+         * Processes a single store entry according to the command and returns result pairs.
+         *
+         * @param key      the input key (for REVIEW, PURCHASE_PRODUCT, or AGGREGATE commands; ignored for SEARCH)
+         * @param storeObj the store object to process
+         * @return a list of (storeName, JSON or message) pairs as results
+         */
         @Override
         public List<MapReduceFramework.Pair<String, String>> map(String key, Store storeObj) {
             List<MapReduceFramework.Pair<String, String>> results = new ArrayList<>();
@@ -98,7 +108,7 @@ public class ClientCommandMapperReducer {
                             if (storeObj.getStoreName().equals(storeName)) {
                                 storeObj.updateStoreReviews(review);
                                 results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
-                                        "Gave "+ "*".repeat(review) +" Stars Review for: "+storeObj.getStoreName()));
+                                        "Gave " + "*".repeat(review) + " Stars Review for: " + storeObj.getStoreName()));
                             }
                         } catch (NumberFormatException e) {
                             results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid review format."));
@@ -160,6 +170,15 @@ public class ClientCommandMapperReducer {
             return results;
         }
 
+        /**
+         * Calculates the great-circle distance between two geographic points using the Haversine formula.
+         *
+         * @param lon1 longitude of the first point
+         * @param lat1 latitude of the first point
+         * @param lon2 longitude of the second point
+         * @param lat2 latitude of the second point
+         * @return distance in kilometers
+         */
         private double calculateDistance(double lon1, double lat1, double lon2, double lat2) {
             int R = 6371; // Earth's radius in km.
             double dLat = Math.toRadians(lat2 - lat1);
@@ -172,13 +191,28 @@ public class ClientCommandMapperReducer {
         }
     }
 
+    /**
+     * Reducer that concatenates all values for a given key into a single string separated by newlines.
+     */
     public static class ClientCommandReducer implements MapReduceFramework.Reducer<String, String, String> {
         private String command;
 
+        /**
+         * Creates a reducer for the specified command.
+         *
+         * @param command the client command (provided for extensibility)
+         */
         public ClientCommandReducer(String command) {
             this.command = command;
         }
 
+        /**
+         * Combines multiple values for a key into a single string.
+         *
+         * @param key    the key to reduce
+         * @param values the list of values associated with the key
+         * @return a single string containing all values separated by newlines
+         */
         @Override
         public String reduce(String key, List<String> values) {
             StringBuilder sb = new StringBuilder();

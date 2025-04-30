@@ -7,6 +7,11 @@ import java.util.Scanner;
 import java.util.Map;
 import com.google.gson.*;
 
+/**
+ * Client for Freefooders that allows a customer to search for stores by food category,
+ * star rating, average price, or radius; purchase products; and submit reviews.
+ * Communicates with the MasterServer over TCP sockets.
+ */
 public class CustomerClient {
     // The host and port where the MasterServer is running.
     private String SERVER_HOST;
@@ -15,29 +20,45 @@ public class CustomerClient {
     private double longitude;
     private int radius;
 
-    public CustomerClient(String server_host,int server_port,double latitude,double longitude)
-    {
+    /**
+     * Creates a CustomerClient with a default radius of 5 km.
+     *
+     * @param server_host the server hostname
+     * @param server_port the server port number
+     * @param latitude    initial latitude
+     * @param longitude   initial longitude
+     */
+    public CustomerClient(String server_host, int server_port, double latitude, double longitude) {
         this.SERVER_HOST  = server_host;
         this.SERVER_PORT = server_port;
         this.latitude = latitude;
         this.longitude = longitude;
-        this.radius = 5;//default value
+        this.radius = 5; //default value
     }
 
-    public CustomerClient(String server_host,int server_port,double latitude,double longitude,int radius)
-    {
+    /**
+     * Creates a CustomerClient with a specified search radius.
+     *
+     * @param server_host the server hostname
+     * @param server_port the server port number
+     * @param latitude    initial latitude
+     * @param longitude   initial longitude
+     * @param radius      search radius in kilometers
+     */
+    public CustomerClient(String server_host, int server_port, double latitude, double longitude, int radius) {
         this.SERVER_HOST  = server_host;
         this.SERVER_PORT = server_port;
         this.latitude = latitude;
         this.longitude = longitude;
         this.radius = radius;
     }
+
     /**
-     * Sends a command along with its data to the Master server.
+     * Sends a command with its payload to the MasterServer and returns the response.
      *
-     * @param command the command type (e.g., "SEARCH", "PURCHASE_PRODUCT").
-     * @param data the associated data as a String.
-     * @return the response from the Master server.
+     * @param command the command type (e.g., "SEARCH", "PURCHASE_PRODUCT")
+     * @param data    the payload string for the command
+     * @return the server's response, or an empty string on error
      */
     private String sendCommand(String command, String data) {
         String response = "";
@@ -60,60 +81,43 @@ public class CustomerClient {
         return response;
     }
 
-    /**
-     * Gets the latitude of the client.
-     *
-     * @return The latitude.
-     */
+    /** Gets the client's current latitude. */
     public double getLatitude() {
         return latitude;
     }
 
-    /**
-     * Sets the latitude of the client.
-     *
-     * @param latitude The new latitude.
-     */
+    /** Sets the client's latitude. */
     public void setLatitude(double latitude) {
         this.latitude = latitude;
     }
 
-    /**
-     * Gets the longitude of the client.
-     *
-     * @return The longitude.
-     */
+    /** Gets the client's current longitude. */
     public double getLongitude() {
         return this.longitude;
     }
 
-    /**
-     * Sets the longitude of the client.
-     *
-     * @param longitude The new longitude.
-     */
+    /** Sets the client's longitude. */
     public void setLongitude(double longitude) {
         this.longitude = longitude;
     }
 
-    /**
-     * Gets the radius of the client.
-     *
-     * @return The radius.
-     */
+    /** Gets the client's search radius in kilometers. */
     public int getRadius() {
         return this.radius;
     }
 
-    /**
-     * Sets the radius of the client.
-     *
-     * @param radius The new longitude.
-     */
+    /** Sets the client's search radius in kilometers. */
     public void setRadius(int radius) {
         this.radius = radius;
     }
 
+    /**
+     * Parses a raw JSON response, expands nested JSON elements, and prints it
+     * in pretty-printed format. If the response is not valid JSON, prints the
+     * original string.
+     *
+     * @param jsonResponse the raw response from the server
+     */
     private void printPrettyResponse(String jsonResponse) {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         try {
@@ -136,9 +140,9 @@ public class CustomerClient {
         }
     }
 
-
     /**
-     * Provides an interactive console for customer operations.
+     * Launches an interactive console menu to allow the user to search stores,
+     * purchase products, submit reviews, or exit the console.
      */
     public void interactiveMenu() {
         Scanner scanner = new Scanner(System.in);
@@ -148,7 +152,7 @@ public class CustomerClient {
             System.out.println("1. Search Stores by Food Category");
             System.out.println("2. Search Stores by StarCategory");
             System.out.println("3. Search Stores by AvgPrice");
-            System.out.println("4. Search Stores in "+this.getRadius()+"km radius");
+            System.out.println("4. Search Stores in " + this.getRadius() + "km radius");
             System.out.println("5. Purchase Product");
             System.out.println("6. Exit");
             System.out.print("Choice: ");
@@ -168,18 +172,18 @@ public class CustomerClient {
                     break;
                 case 2:
                     String messageForStars = "Star";
-                    int stars = getValidInteger(messageForStars,5);
+                    int stars = getValidInteger(messageForStars, 5);
                     String searchStarsResponse = sendCommand("SEARCH", "Stars=" + stars);
                     printPrettyResponse(searchStarsResponse);
                     break;
                 case 3:
                     String messageForAvgPrice = "AvgPrice";
-                    int avgPrice = getValidInteger(messageForAvgPrice,3);
+                    int avgPrice = getValidInteger(messageForAvgPrice, 3);
                     String searchAvgPriceResponse = sendCommand("SEARCH", "AvgPrice=" + avgPrice);
                     printPrettyResponse(searchAvgPriceResponse);
                     break;
                 case 4:
-                    String messageForRadiusFilter = getRadius() + "," +getLongitude()+ "," +getLatitude();
+                    String messageForRadiusFilter = getRadius() + "," + getLongitude() + "," + getLatitude();
                     String searchRadiusResponse = sendCommand("SEARCH", "Radius=" + messageForRadiusFilter);
                     printPrettyResponse(searchRadiusResponse);
                     break;
@@ -192,10 +196,9 @@ public class CustomerClient {
                     String quantity = scanner.nextLine();
                     String purchaseResponse = sendCommand("PURCHASE_PRODUCT", storeName + "|" + productName + "|" + quantity);
                     printPrettyResponse(purchaseResponse);
-                    if(purchaseResponse.contains("Successfully"))
-                    {
+                    if (purchaseResponse.contains("Successfully")) {
                         String messageForReview = "Review";
-                        int review = getValidInteger(messageForReview,5);
+                        int review = getValidInteger(messageForReview, 5);
                         String reviewResponse = sendCommand("REVIEW", storeName + "|" + Integer.toString(review));
                         printPrettyResponse(reviewResponse);
                     }
@@ -210,12 +213,19 @@ public class CustomerClient {
         }
     }
 
-    public int getValidInteger(String message,int range)
-    {
+    /**
+     * Prompts the user to enter an integer between 1 and {@code range}, inclusive.
+     * Repeats until valid input is provided.
+     *
+     * @param message label for the value being requested (e.g., "Stars", "Review")
+     * @param range   maximum valid value
+     * @return the validated integer entered by the user
+     */
+    public int getValidInteger(String message, int range) {
         Scanner scanner = new Scanner(System.in);
         int review = 0;
         boolean validInput = false;
-        System.out.print("Select a " + message +  " (1-" + range + "): ");
+        System.out.print("Select a " + message + " (1-" + range + "): ");
         while (!validInput) {
             try {
                 review = scanner.nextInt();
@@ -229,7 +239,6 @@ public class CustomerClient {
                 scanner.next(); // Consume the invalid input
             }
         }
-        return  review;
+        return review;
     }
-
 }

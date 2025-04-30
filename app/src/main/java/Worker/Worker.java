@@ -15,33 +15,49 @@ import java.util.List;
 import java.util.Map;
 import Reduce.Reduce;
 
+/**
+ * Worker node for the Freefooders system.
+ * Connects to the Master server, loads and partitions store data,
+ * processes client and manager commands by mapping over local stores,
+ * and sends mapping results to the external reduce server when required.
+ */
 public class Worker {
     private int port;
     private StoreManager storeManager;
     private ProductManager productManager;
-    // full store list for dynamic add/remove
-    private final List<Store> allStores = new ArrayList<>();
-    // Worker identification (set by handshake)
-    private int workerId = -1;
+    private final List<Store> allStores = new ArrayList<>();  // full store list for dynamic add/remove
+    private int workerId = -1;    // assigned by handshake
     private int totalWorkers = 1;
     private Gson gson = new Gson();
     private PrintWriter writer;
     private Socket socket;
 
+    /**
+     * Constructs a Worker that connects to the Master on the specified port.
+     *
+     * @param port the port to connect to the Master server
+     */
     public Worker(int port) {
         this.port = port;
         storeManager = new StoreManager();
         productManager = new ProductManager();
     }
 
+    /**
+     * Constructs a Worker that connects to the Master on the default port 12345.
+     */
     public Worker() {
         this(12345);
     }
 
     /**
      * Processes a command by mapping over local stores.
-     * For commands that require reduction (client: SEARCH, AGGREGATE_SALES_BY_PRODUCT_NAME;
-     * manager: LIST_STORES, DELETED_PRODUCTS), the worker sends its mapping result to the external reduce server.
+     * For commands requiring reduction (SEARCH, AGGREGATE_SALES_BY_PRODUCT_NAME,
+     * LIST_STORES, DELETED_PRODUCTS), sends mapping results to the external reduce server.
+     *
+     * @param command the command to process
+     * @param data    the associated data payload
+     * @return a JSON string representing the mapping result or status message
      */
     public String processCommand(String command, String data) {
         // dynamic add/remove updates the full list, then await reload
@@ -131,9 +147,8 @@ public class Worker {
             for (MapReduceFramework.Pair<String, Store> pair : input) {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
-            String mappingResult = gson.toJson(intermediate);
             // For REVIEW, do not reduce; return the mapping result directly.
-            return mappingResult;
+            return gson.toJson(intermediate);
         }
         else if (command.equalsIgnoreCase("PURCHASE_PRODUCT")) {
             // For PURCHASE_PRODUCT, process only the target store.
@@ -231,12 +246,15 @@ public class Worker {
     }
 
     /**
-     * Sends mapping result to the reduce server.
-     * For commands requiring reduction, the expected count is the total number of workers.
+     * Sends mapping results to the reduce server for commands that require reduction.
+     *
+     * @param command        the command name
+     * @param mappingResult  JSON string of mapping output
+     * @return status message as JSON
      */
     private String sendToReduceServer(String command, String mappingResult) {
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "localhost";  // adjust as needed
+        String reduceServerHost = "localhost";
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
@@ -251,8 +269,8 @@ public class Worker {
     }
 
     /**
-     * Loads store JSON files from resources and partitions them based on the worker's
-     * assigned workerId and the current totalWorkers count.
+     * Loads store JSON resources and partitions them based on workerId and totalWorkers.
+     * Initializes the StoreManager with the partition assigned to this worker.
      */
     public void loadStores() {
         // initial JSON load
@@ -310,6 +328,11 @@ public class Worker {
         System.out.println("Worker " + workerId + " loaded " + partitionStores.size() + " stores out of " + allStores.size());
     }
 
+    /**
+     * Starts the worker:
+     * performs handshake with the Master server, loads stores,
+     * listens for commands to process, and handles reload and shutdown events.
+     */
     public void start() {
         try {
             socket = new Socket("localhost", port);
@@ -356,7 +379,7 @@ public class Worker {
                     try {
                         int newTotalWorkers = Integer.parseInt(data.trim());
                         this.totalWorkers = newTotalWorkers;
-                        System.out.println("Total Workers: "+totalWorkers);
+                        System.out.println("Total Workers: " + totalWorkers);
                         loadStores();
                         writer.println("RELOAD_RESPONSE:" + "Worker " + workerId + " reloaded " + storeManager.getAllStores().size() + " stores.");
                         System.out.println("Worker " + workerId + " reloaded stores after update: " + storeManager.getAllStores().size());
@@ -372,7 +395,6 @@ public class Worker {
                     this.workerId     = newId;
                     this.totalWorkers = newTotal;
                     System.out.println("Worker changed id to: " + workerId);
-
                     continue;
                 }
                 System.out.println("Worker " + workerId + " received command: " + command);
@@ -388,6 +410,12 @@ public class Worker {
         }
     }
 
+    /**
+     * Sends a shutdown notification to the Master server
+     * so that this worker can be gracefully deregistered.
+     *
+     * @throws IOException if an I/O error occurs when connecting
+     */
     private void sendTerminationCommand() throws IOException {
         try {
             try (Socket socketTemp = new Socket("localhost", port);
@@ -401,8 +429,11 @@ public class Worker {
         }
     }
 
-    private void checkKeyboardInputForShutdown()
-    {
+    /**
+     * Starts a background thread that listens for "SHUTDOWN" on the console input
+     * and exits the process when received.
+     */
+    private void checkKeyboardInputForShutdown() {
         new Thread(() -> {
             BufferedReader terminalReader = new BufferedReader(new InputStreamReader(System.in));
             while (true) {
@@ -419,6 +450,12 @@ public class Worker {
         }).start();
     }
 
+    /**
+     * Main entry point for the Worker application.
+     * Registers a shutdown hook to notify Master before exit and starts the worker.
+     *
+     * @param args command-line arguments (not used)
+     */
     public static void main(String[] args) {
         Worker worker = new Worker(12345);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

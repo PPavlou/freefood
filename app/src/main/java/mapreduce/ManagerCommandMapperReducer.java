@@ -11,11 +11,15 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * ManagerCommandMapperReducer handles filtering for manager commands.
- * It groups the filters used by the Manager.
+ * Contains mapper and reducer implementations for processing manager commands,
+ * performing store and product management operations.
  */
 public class ManagerCommandMapperReducer {
 
+    /**
+     * Mapper for manager commands. Executes actions such as adding/removing stores,
+     * adding/removing/updating products, and emits (key, result) pairs.
+     */
     public static class CommandMapper implements MapReduceFramework.Mapper<String, Store, String, String> {
         private String command;
         private String query = null;
@@ -23,12 +27,27 @@ public class ManagerCommandMapperReducer {
         private ProductManager productManager;
         private Gson gson = new Gson();
 
+        /**
+         * Constructs a CommandMapper for commands without additional query data.
+         *
+         * @param command         the manager command (e.g., "ADD_STORE", "REMOVE_PRODUCT")
+         * @param storeManager    the StoreManager instance to apply store operations
+         * @param productManager  the ProductManager instance to apply product operations
+         */
         public CommandMapper(String command, StoreManager storeManager, ProductManager productManager) {
             this.command = command;
             this.storeManager = storeManager;
             this.productManager = productManager;
         }
 
+        /**
+         * Constructs a CommandMapper for commands that include a query string.
+         *
+         * @param command         the manager command (e.g., "AGGREGATE_SALES_BY_PRODUCT_NAME")
+         * @param query           the raw query string (e.g., "ProductName=<value>")
+         * @param storeManager    the StoreManager instance to apply store operations
+         * @param productManager  the ProductManager instance to apply product operations
+         */
         public CommandMapper(String command, String query, StoreManager storeManager, ProductManager productManager) {
             this.command = command;
             this.query = query;
@@ -36,6 +55,14 @@ public class ManagerCommandMapperReducer {
             this.productManager = productManager;
         }
 
+        /**
+         * Processes a single store object according to the manager command
+         * and returns a list of (key, result) pairs.
+         *
+         * @param key      the input key containing command parameters
+         * @param storeObj the store object to process
+         * @return list of pairs mapping store names or command identifiers to result messages
+         */
         @Override
         public List<MapReduceFramework.Pair<String, String>> map(String key, Store storeObj) {
             List<MapReduceFramework.Pair<String, String>> results = new ArrayList<>();
@@ -185,7 +212,6 @@ public class ManagerCommandMapperReducer {
                     }
                     break;
                 }
-
                 default: {
                     results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
                             "Command " + command + " not supported in manager filter group."));
@@ -196,21 +222,33 @@ public class ManagerCommandMapperReducer {
     }
 
     /**
-     * Generic CommandReducer for manager commands.
-     * For LIST_STORES, it merges duplicate store names; for other commands, it concatenates responses.
+     * Reducer for manager commands. For LIST_STORES merges unique store names;
+     * for other commands concatenates response messages.
      */
     public static class CommandReducer implements MapReduceFramework.Reducer<String, String, String> {
         private String command;
 
+        /**
+         * Constructs a CommandReducer for the specified manager command.
+         *
+         * @param command the manager command name
+         */
         public CommandReducer(String command) {
             this.command = command;
         }
 
+        /**
+         * Reduces a list of values for a given key into a single formatted string.
+         *
+         * @param key    the key to reduce
+         * @param values the list of values associated with the key
+         * @return the reduced result string
+         */
         @Override
         public String reduce(String key, List<String> values) {
             if ("LIST_STORES".equalsIgnoreCase(command)) {
                 // Use a LinkedHashSet to preserve order and eliminate duplicates.
-                java.util.Set<String> uniqueStores = new java.util.LinkedHashSet<>();
+                java.util.Set<String> uniqueStores = new LinkedHashSet<>();
                 for (String value : values) {
                     uniqueStores.add(value.trim());
                 }

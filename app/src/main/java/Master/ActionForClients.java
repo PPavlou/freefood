@@ -14,26 +14,46 @@ import java.util.Arrays;
 import com.google.gson.Gson;
 import model.Store;
 
+/**
+ * Handles incoming client connections, forwards commands to worker nodes,
+ * collects and reduces their responses, and sends the final result back to the client.
+ */
 public class ActionForClients implements Runnable {
     private Socket clientSocket;
     private List<Socket> workerSockets;
     private BufferedReader initialReader;
     private String firstLine;
 
-    public ActionForClients(Socket clientSocket, List<Socket> workerSockets, String firstLine, BufferedReader initialReader) {
-        this.clientSocket = clientSocket;
+    /**
+     * Constructs a handler for a connected client.
+     *
+     * @param clientSocket   the socket connected to the client
+     * @param workerSockets  the list of sockets for available worker nodes
+     * @param firstLine      the first command line received from the client
+     * @param initialReader  reader already positioned after reading the first line
+     */
+    public ActionForClients(Socket clientSocket,
+                            List<Socket> workerSockets,
+                            String firstLine,
+                            BufferedReader initialReader) {
+        this.clientSocket  = clientSocket;
         this.workerSockets = workerSockets;
-        this.firstLine = firstLine;
+        this.firstLine     = firstLine;
         this.initialReader = initialReader;
     }
 
+    /**
+     * Entry point for the client handler thread.
+     * Reads the full client command, forwards it to workers,
+     * waits for or computes the reduced response, and writes it back.
+     */
     @Override
     public void run() {
         try (BufferedReader reader = initialReader;
              PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true)) {
 
             String command = firstLine;
-            String data = reader.readLine();
+            String data    = reader.readLine();
             System.out.println("Master received command: " + command);
             System.out.println("Master received data: " + data);
 
@@ -81,19 +101,29 @@ public class ActionForClients implements Runnable {
                             .removeIf(s -> s.getStoreName().equals(data.trim()));
                 }
 
-                // now tell _all_ workers (including any newcomers) to reload
                 MasterServer.broadcastReload();
             }
-
 
         } catch (IOException e) {
             System.err.println("ClientHandler error: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            try { clientSocket.close(); } catch (IOException e) { /* ignore */ }
+            try {
+                clientSocket.close();
+            } catch (IOException e) {
+                // ignore
+            }
         }
     }
 
+    /**
+     * Forwards the given command and data to appropriate worker(s),
+     * collects their responses, and returns the list of results.
+     *
+     * @param command the client command to forward
+     * @param data    the payload for the command
+     * @return list of responses from workers
+     */
     private List<String> forwardToWorkers(String command, String data) {
         List<String> responses = new ArrayList<>();
 
@@ -110,11 +140,6 @@ public class ActionForClients implements Runnable {
                 responses.add("Error: Cannot extract store name for command " + command);
                 return responses;
             }
-            Socket workerSocket;
-            int workerCountLocal = workerSockets.size();
-            int index = Math.abs(storeName.hashCode()) % workerCountLocal;
-            workerSocket = workerSockets.get(index);
-
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
@@ -126,6 +151,10 @@ public class ActionForClients implements Runnable {
                     }
                 }
             }
+            int workerCount = workerSockets.size();
+            int index       = Math.abs(storeName.hashCode()) % workerCount;
+            Socket workerSocket = workerSockets.get(index);
+
             try {
                 synchronized (workerSocket) {
                     PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
@@ -134,6 +163,7 @@ public class ActionForClients implements Runnable {
                     );
                     out.println(command);
                     out.println(data);
+
                     String line;
                     while ((line = in.readLine()) != null) {
                         if (line.startsWith("CMD_RESPONSE:")) {
@@ -145,9 +175,8 @@ public class ActionForClients implements Runnable {
                     int replicationFactor = 2;
                     List<Integer> replicaIds = new ArrayList<>();
                     for (int r = 1; r < replicationFactor; r++) {
-                        replicaIds.add((index + r) % workerCountLocal);
+                        replicaIds.add((index + r) % workerCount);
                     }
-                    // build the same “command|data” payload
                     String payload = command + "|" + data;
                     MasterServer.broadcastToReplicas(replicaIds, payload);
                 }
@@ -156,7 +185,6 @@ public class ActionForClients implements Runnable {
             }
 
         } else {
-            // Broadcast to all workers
             synchronized (MasterServer.workerAvailable) {
                 while (workerSockets.isEmpty()) {
                     try {
@@ -194,6 +222,14 @@ public class ActionForClients implements Runnable {
         return responses;
     }
 
+    /**
+     * Extracts the target store name from the command and data payload,
+     * using the expected format for each command type.
+     *
+     * @param command the client command name
+     * @param data    the payload string (may contain storeName in various formats)
+     * @return the extracted store name, or null if it cannot be determined
+     */
     private String extractStoreName(String command, String data) {
         if ("ADD_STORE".equalsIgnoreCase(command)) {
             try {

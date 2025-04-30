@@ -12,22 +12,48 @@ import java.util.Map;
 import com.google.gson.Gson;
 import model.Store;
 
+/**
+ * MasterServer listens for worker and client connections,
+ * manages worker registration and shutdown,
+ * coordinates map-reduce operations,
+ * and forwards commands between clients and workers.
+ */
 public class MasterServer {
+    /** Port on which the MasterServer listens. */
     private static final int MASTER_PORT = 12345;
-    // Thread-safe list for worker sockets.
-    public static List<Socket> workerSockets = Collections.synchronizedList(new ArrayList<>());
+
+    /** Thread-safe list of sockets for connected worker nodes. */
+    public static List<Socket> workerSockets =
+            Collections.synchronizedList(new ArrayList<>());
+
+    /** Thread-safe map of worker IDs to their sockets. */
     public static final Map<Integer,Socket> workerSocketsById =
             Collections.synchronizedMap(new HashMap<>());
-    // A counter for worker registrations.
-    private static int workerCount = 0;
-    public static final Object workerAvailable = new Object();
-    public static final List<Store> dynamicStores = Collections.synchronizedList(new ArrayList<>());
 
-    // Global container for reduce results keyed by command.
+    /** Counter for assigning worker IDs. */
+    private static int workerCount = 0;
+
+    /** Monitor object for worker availability notifications. */
+    public static final Object workerAvailable = new Object();
+
+    /** List of stores added or removed dynamically, shared with new workers on registration. */
+    public static final List<Store> dynamicStores =
+            Collections.synchronizedList(new ArrayList<>());
+
+    /** Map storing pending reduce results, keyed by command name. */
     public static final Map<String, String> pendingReduceResults = new HashMap<>();
-    // Lock object for synchronizing reduce result waiting.
+
+    /** Lock object for synchronizing waiting for reduce results. */
     public static final Object reduceLock = new Object();
 
+    /**
+     * Entry point for the Master server.
+     * Listens for incoming connections on the master port, handles:
+     * worker handshakes, worker shutdown notifications,
+     * reduce result submissions, and client commands.
+     *
+     * @param args command-line arguments (not used)
+     */
     public static void main(String[] args) {
         ServerSocket serverSocket = null;
         try {
@@ -104,7 +130,6 @@ public class MasterServer {
                         broadcastReload();
                     }
                 }
-
                 else if ("REDUCE_RESULT".equals(firstLine)) {
                     String command = reader.readLine();
                     String aggregatedResult = reader.readLine();
@@ -151,10 +176,10 @@ public class MasterServer {
     }
 
     /**
-     * Broadcasts a message to a specific set of worker IDs (e.g., a primary and its replicas).
+     * Broadcasts a message to specific worker replicas.
      *
-     * @param workerIds List of worker IDs (primary + replicas) to send the message.
-     * @param message The message to send.
+     * @param workerIds list of worker IDs (primary + replicas) to send the message to
+     * @param message   the message to send
      */
     public static void broadcastToReplicas(List<Integer> workerIds, String message) {
         synchronized (workerAvailable) {
@@ -175,9 +200,10 @@ public class MasterServer {
     }
 
     /**
-     * After a worker goes offline, for every remaining worker whose
-     * oldId > removedId, shift them down by one and tell them to
-     * decrement their own workerId.
+     * Shifts down worker IDs for all workers with IDs greater than the removed ID,
+     * notifies them to decrement their internal ID, and updates the mapping.
+     *
+     * @param removedId the ID of the worker that was removed
      */
     private static void shiftWorkerIdsDown(int removedId) {
         Map<Integer, Socket> updatedAssignments = new HashMap<>();
@@ -191,7 +217,7 @@ public class MasterServer {
                     PrintWriter out = new PrintWriter(sock.getOutputStream(), true);
                     out.println("DECREMENT_ID");
                     out.println(newId + ":" + workerCount);
-                    System.out.println("DECREASE ID FOR WORKER: "+oldId);
+                    System.out.println("DECREASE ID FOR WORKER: " + oldId);
                 } catch (IOException ex) {
                     System.err.println("Failed to notify worker " + oldId + " of new ID: " + ex.getMessage());
                 }
@@ -199,5 +225,4 @@ public class MasterServer {
         }
         workerSocketsById.putAll(updatedAssignments);
     }
-
 }

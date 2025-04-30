@@ -10,17 +10,32 @@ import java.util.InputMismatchException;
 import java.util.Scanner;
 import java.util.function.Function;
 
+/**
+ * Manager client for Freefooders that sends administrative commands to the MasterServer.
+ * Supports adding and removing stores and products, adjusting product amounts,
+ * generating deleted products reports, aggregating sales, and listing stores.
+ */
 public class Manager {
     private String masterHost;
     private int masterPort;
 
+    /**
+     * Constructs a Manager with the given MasterServer host and port.
+     *
+     * @param masterHost the server hostname
+     * @param masterPort the server port number
+     */
     public Manager(String masterHost, int masterPort) {
         this.masterHost = masterHost;
         this.masterPort = masterPort;
     }
 
     /**
-     * Sends a command along with its data to the Master server.
+     * Sends a command along with its payload to the Master server and returns the response.
+     *
+     * @param command the command to send (e.g., "ADD_STORE", "REMOVE_PRODUCT")
+     * @param data    the payload string for the command
+     * @return the server's response, or an empty string on error
      */
     private String sendCommand(String command, String data) {
         String response = "";
@@ -37,7 +52,13 @@ public class Manager {
         return response;
     }
 
-
+    /**
+     * Parses a raw JSON response, expands any nested JSON strings,
+     * and prints it in pretty-printed format. If parsing fails, prints
+     * the original response.
+     *
+     * @param jsonResponse the raw response from the server
+     */
     private void printPrettyResponse(String jsonResponse) {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         try {
@@ -59,6 +80,15 @@ public class Manager {
         }
     }
 
+    /**
+     * Prompts the user to enter a non-negative number using the provided input method.
+     * Continues prompting until valid input is received.
+     *
+     * @param inputMethod function that reads the desired number type from Scanner
+     * @param typeName    label for the expected input (e.g., "integer", "number")
+     * @param <T>         a subtype of Number
+     * @return the validated non-negative number
+     */
     public <T extends Number> T getValidNumber(Function<Scanner, T> inputMethod, String typeName) {
         Scanner scanner = new Scanner(System.in);
         T value = null;
@@ -67,10 +97,11 @@ public class Manager {
         while (!validInput) {
             try {
                 value = inputMethod.apply(scanner);
-                if (value.doubleValue()>=0)
+                if (value.doubleValue() >= 0) {
                     validInput = true;
-                else
-                    System.out.print("Please enter a " + typeName + " >=0: ");
+                } else {
+                    System.out.print("Please enter a " + typeName + " >= 0: ");
+                }
             } catch (InputMismatchException e) {
                 System.out.print("Please enter a valid " + typeName + ": ");
                 scanner.next(); // Consume the invalid input
@@ -81,7 +112,9 @@ public class Manager {
     }
 
     /**
-     * Provides an interactive console for Manager operations.
+     * Launches an interactive console menu for manager operations:
+     * add/remove stores, add/remove products, adjust product amounts,
+     * view deleted products report, list stores, aggregate sales, and exit.
      */
     public void interactiveMenu() {
         Scanner scanner = new Scanner(System.in);
@@ -121,7 +154,7 @@ public class Manager {
                     String foodCategory = scanner.nextLine();
                     System.out.print("Rating (stars, 1-5): ");
                     int stars = getValidNumber(Scanner::nextInt, "integer");
-                    while(stars<1 || stars >5){
+                    while (stars < 1 || stars > 5) {
                         System.out.print("Rating (stars, 1-5): ");
                         stars = getValidNumber(Scanner::nextInt, "integer");
                     }
@@ -288,6 +321,11 @@ public class Manager {
         }
     }
 
+    /**
+     * Entry point for the Manager console application.
+     *
+     * @param args command-line arguments (not used)
+     */
     public static void main(String[] args) {
         // Manager connects to Master on localhost:12345.
         Manager manager = new Manager("localhost", 12345);
