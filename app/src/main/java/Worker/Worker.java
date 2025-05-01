@@ -51,6 +51,30 @@ public class Worker {
     }
 
     /**
+     * Determines which worker should handle a specific store based on consistent hashing.
+     *
+     * @param storeName the name of the store
+     * @param totalWorkers the total number of workers
+     * @return the worker ID that should handle this store
+     */
+    public static int getWorkerIdForStore(String storeName, int totalWorkers) {
+        if (totalWorkers <= 0) {
+            return 0;
+        }
+        return Math.abs(storeName.hashCode()) % totalWorkers;
+    }
+
+    /**
+     * Checks if this worker should handle the specified store.
+     *
+     * @param storeName the name of the store
+     * @return true if this worker should handle the store, false otherwise
+     */
+    public boolean shouldHandleStore(String storeName) {
+        return getWorkerIdForStore(storeName, totalWorkers) == workerId;
+    }
+
+    /**
      * Processes a command by mapping over local stores.
      * For commands requiring reduction (SEARCH, AGGREGATE_SALES_BY_PRODUCT_NAME,
      * LIST_STORES, DELETED_PRODUCTS), sends mapping results to the external reduce server.
@@ -254,7 +278,7 @@ public class Worker {
      */
     private String sendToReduceServer(String command, String mappingResult) {
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "localhost";
+        String reduceServerHost = "172.20.10.2";
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
@@ -308,24 +332,29 @@ public class Worker {
                 }
             }
         }
-        // partition from full list
+
+        // partition from full list using hash-based mapping
         List<Store> partitionStores = new ArrayList<>();
         if (totalWorkers <= 0) {
             totalWorkers = 1;
         }
-        for (int i = 0; i < allStores.size(); i++) {
-            if (i % totalWorkers == workerId) {
-                Store s = allStores.get(i);
+        for (Store s : allStores) {
+            // Use the consistent hashing method
+            if (shouldHandleStore(s.getStoreName())) {
                 s.setAveragePriceOfStore();
                 s.setAveragePriceOfStoreSymbol();
                 partitionStores.add(s);
             }
         }
+
         storeManager = new StoreManager();
         for (Store s : partitionStores) {
             storeManager.addStore(s);
         }
-        System.out.println("Worker " + workerId + " loaded " + partitionStores.size() + " stores out of " + allStores.size());
+
+        System.out.println("Worker " + workerId + " loaded " +
+                partitionStores.size() + " stores out of " +
+                allStores.size());
     }
 
     /**
@@ -335,7 +364,7 @@ public class Worker {
      */
     public void start() {
         try {
-            socket = new Socket("localhost", port);
+            socket = new Socket("172.20.10.2", port);
             writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -418,7 +447,7 @@ public class Worker {
      */
     private void sendTerminationCommand() throws IOException {
         try {
-            try (Socket socketTemp = new Socket("localhost", port);
+            try (Socket socketTemp = new Socket("172.20.10.2", port);
                  PrintWriter writerTemp = new PrintWriter(socketTemp.getOutputStream(), true)) { // Auto-flush enabled
                 writerTemp.println("WORKER_SHUTDOWN:" + workerId);
                 totalWorkers--;
