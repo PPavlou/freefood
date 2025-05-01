@@ -63,7 +63,31 @@ public class ClientCommandMapperReducer {
                     break;
                 }
                 case "PURCHASE_PRODUCT": {
-                    handlePurchase(key, storeObj, results);
+                    // Expect key format: "storeName|productName|quantity"
+                    String[] parts = key.split("\\|");
+                    if (parts.length < 3) {
+                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid data for PURCHASE_PRODUCT."));
+                        break;
+                    }
+                    String storeName = parts[0].trim();
+                    String productName = parts[1].trim();
+                    int quantity;
+                    try {
+                        quantity = Integer.parseInt(parts[2].trim());
+                    } catch (NumberFormatException e) {
+                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid quantity format."));
+                        break;
+                    }
+                    if (storeObj.getStoreName().equals(storeName)) {
+                        boolean success = storeObj.purchaseProduct(productName, quantity);
+                        if (success) {
+                            results.add(new MapReduceFramework.Pair<>(storeName,
+                                    "Successfully purchased " + quantity + " of " + productName + " from store " + storeName + "."));
+                        } else {
+                            results.add(new MapReduceFramework.Pair<>(storeName,
+                                    "Purchase failed: insufficient stock or product not found."));
+                        }
+                    }
                     break;
                 }
                 default:
@@ -147,25 +171,6 @@ public class ClientCommandMapperReducer {
             } else {
                 out.add(new MapReduceFramework.Pair<>(s.getStoreName(),
                         "Invalid aggregation query format. Expected ProductName=<value>."));
-            }
-        }
-
-        private void handlePurchase(String key, Store s,
-                                    List<MapReduceFramework.Pair<String,String>> out) {
-            String[] parts = key.split("\\|");
-            if (parts.length >= 3 && s.getStoreName().equals(parts[0].trim())) {
-                String productName = parts[1].trim();
-                try {
-                    int qty = Integer.parseInt(parts[2].trim());
-                    boolean ok = s.purchaseProduct(productName, qty);
-                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(),
-                            ok ? "Successfully purchased " + qty + " of " + productName
-                                    : "Purchase failed: insufficient stock or product not found."));
-                } catch (NumberFormatException e) {
-                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(), "Invalid quantity format."));
-                }
-            } else {
-                out.add(new MapReduceFramework.Pair<>(s.getStoreName(), "Invalid data for PURCHASE_PRODUCT."));
             }
         }
 

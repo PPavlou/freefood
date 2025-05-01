@@ -76,15 +76,6 @@ public class MasterServer {
                     // Tell the newcomer its slot and live count
                     writer.println("WORKER_ASSIGN:" + assignedId + ":" + workerCount);
 
-                    // REPLAY any stores that were added dynamically before this worker arrived
-                    //    (so it builds the same allStores list as the veterans)
-                    synchronized (dynamicStores) {
-                        Gson gson = new Gson();
-                        for (Store s : dynamicStores) {
-                            writer.println("ADD_STORE");
-                            writer.println(gson.toJson(s));
-                        }
-                    }
 
                     // REPLAY any stores that were added dynamically before this worker arrived
                     synchronized (dynamicStores) {
