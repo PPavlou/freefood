@@ -91,6 +91,39 @@ public class ProductManager {
     }
 
     /**
+     * Increases the available amount for a given product in a store.
+     *
+     * @param store        The store containing the product.
+     * @param productName  The product whose amount is to be increased.
+     * @param increment    The number of units to add (must be positive).
+     * @return A message indicating success, or an error message if the product is not found
+     *         or the increment is invalid.
+     */
+    public String incrementProductAmount(Store store, String productName, int increment) {
+        if (increment <= 0) {
+            return "Increment must be a positive number.";
+        }
+
+        // Trim the incoming productName
+        productName = productName.trim();
+
+        for (Product product : store.getProducts()) {
+            // Check with trimmed stored product name
+            if (product.getProductName() != null
+                    && product.getProductName().trim().equals(productName)) {
+
+                int newAmount = product.getAvailableAmount() + increment;
+                product.setAvailableAmount(newAmount);
+
+                return "Product " + productName + " amount increased by " + increment +
+                        " in store " + store.getStoreName() + ". New amount: " + newAmount + ".";
+            }
+        }
+        return "Product " + productName + " not found in store " + store.getStoreName() + ".";
+    }
+
+
+    /**
      * Decreases the available amount for a given product in a store.
      * Checks if the removal quantity exceeds the current amount.
      *

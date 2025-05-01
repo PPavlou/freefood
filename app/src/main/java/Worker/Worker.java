@@ -26,7 +26,7 @@ public class Worker {
     private int port;
     private StoreManager storeManager;
     private ProductManager productManager;
-    private final List<Store> allStores = MasterServer.dynamicStores;  // full store list for dynamic add/remove
+    private final List<Store> allStores = new ArrayList<>();  // full store list for dynamic add/remove
     private int workerId = -1;    // assigned by handshake
     private int totalWorkers = 1;
     private Gson gson = new Gson();

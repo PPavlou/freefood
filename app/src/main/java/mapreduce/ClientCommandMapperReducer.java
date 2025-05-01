@@ -7,219 +7,178 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Contains mapper and reducer implementations for processing client commands.
+ * Mapper implementation for *client* commands.
+ *
  * Supported commands:
- *   - SEARCH: expects data "filterKey=filterValue" (e.g., "FoodCategory=pizzeria")
- *   - REVIEW: expects data "storeName|review"
- *   - AGGREGATE_SALES_BY_PRODUCT_NAME: expects data "ProductName=<value>"
- *   - PURCHASE_PRODUCT: expects data "storeName|productName|quantity"
+ *   • SEARCH  (filterKey=filterValue)
+ *   • REVIEW  (storeName|stars)
+ *   • AGGREGATE_SALES_BY_PRODUCT_NAME (ProductName=<value>)
+ *   • PURCHASE_PRODUCT (storeName|productName|qty)
+ *
+ * Each invocation emits zero or more {@code Pair<String,String>} objects that the
+ * worker serialises and (optionally) forwards to the external reduce server.
  */
 public class ClientCommandMapperReducer {
 
-    /**
-     * Mapper for client commands. Applies filters or updates on store objects based on the command
-     * and emits (storeName, result) pairs.
-     */
-    public static class ClientCommandMapper implements MapReduceFramework.Mapper<String, Store, String, String> {
-        private String command;
-        private Gson gson = new Gson();
+    public static class ClientCommandMapper
+            implements MapReduceFramework.Mapper<String, Store, String, String> {
+
+        private final String command;
+        private final Gson   gson = new Gson();
+
+        // SEARCH-only helpers
         private String filterKey;
         private String filterValue;
-        private String data;
-        private Map<String, Store> localStores;
 
-        /**
-         * Creates a mapper for the given command with its data and the local store map.
-         *
-         * @param command     the client command ("SEARCH", "REVIEW", "AGGREGATE_SALES_BY_PRODUCT_NAME", or "PURCHASE_PRODUCT")
-         * @param data        the raw data string from the client
-         * @param localStores the map of storeName to Store objects for processing
-         */
-        public ClientCommandMapper(String command, String data, Map<String, Store> localStores) {
+        public ClientCommandMapper(String command,
+                                   String data,
+                                   Map<String, Store> localStores) {
             this.command = command;
-            this.localStores = localStores;
-            this.data = data;
+
             if ("SEARCH".equalsIgnoreCase(command)) {
                 String[] parts = data.split("=", 2);
                 if (parts.length == 2) {
-                    this.filterKey = parts[0].trim();
+                    this.filterKey   = parts[0].trim();
                     this.filterValue = parts[1].trim();
                 }
             }
         }
 
-        /**
-         * Processes a single store entry according to the command and returns result pairs.
-         *
-         * @param key      the input key (for REVIEW, PURCHASE_PRODUCT, or AGGREGATE commands; ignored for SEARCH)
-         * @param storeObj the store object to process
-         * @return a list of (storeName, JSON or message) pairs as results
-         */
         @Override
-        public List<MapReduceFramework.Pair<String, String>> map(String key, Store storeObj) {
+        public List<MapReduceFramework.Pair<String, String>> map(String key,
+                                                                 Store storeObj) {
             List<MapReduceFramework.Pair<String, String>> results = new ArrayList<>();
+
             switch (command.toUpperCase()) {
                 case "SEARCH": {
-                    // Apply different filters based on filterKey.
-                    if ("FoodCategory".equalsIgnoreCase(filterKey)) {
-                        if (storeObj.getFoodCategory().equalsIgnoreCase(filterValue)) {
-                            results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), gson.toJson(storeObj)));
-                        }
-                    } else if ("Stars".equalsIgnoreCase(filterKey)) {
-                        try {
-                            int starsFilter = Integer.parseInt(filterValue);
-                            if (storeObj.getStars() == starsFilter) {
-                                results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), gson.toJson(storeObj)));
-                            }
-                        } catch (NumberFormatException e) {
-                            // Ignore invalid format.
-                        }
-                    } else if ("AvgPrice".equalsIgnoreCase(filterKey)) {
-                        int count = Integer.parseInt(filterValue);
-                        if (storeObj.getAveragePriceOfStoreSymbol().equals("$".repeat(count))) {
-                            results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), gson.toJson(storeObj)));
-                        }
-                    } else if ("Radius".equalsIgnoreCase(filterKey)) {
-                        // Expected filterValue format: "radius,clientLongitude,clientLatitude"
-                        String[] parts = filterValue.split(",");
-                        if (parts.length == 3) {
-                            try {
-                                int radius = Integer.parseInt(parts[0].trim());
-                                double clientLon = Double.parseDouble(parts[1].trim());
-                                double clientLat = Double.parseDouble(parts[2].trim());
-                                double distance = calculateDistance(storeObj.getLongitude(), storeObj.getLatitude(), clientLon, clientLat);
-                                if (distance <= radius) {
-                                    results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), gson.toJson(storeObj)));
-                                }
-                            } catch (NumberFormatException e) {
-                                // Ignore invalid numeric format.
-                            }
-                        }
-                    }
+                    applySearchFilters(storeObj, results);
                     break;
                 }
                 case "REVIEW": {
-                    // Expect key format: "storeName|review"
-                    String[] parts = key.split("\\|");
-                    if (parts.length >= 2) {
-                        String storeName = parts[0].trim();
-                        try {
-                            int review = Integer.parseInt(parts[1].trim());
-                            if (storeObj.getStoreName().equals(storeName)) {
-                                storeObj.updateStoreReviews(review);
-                                results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
-                                        "Gave " + "*".repeat(review) + " Stars Review for: " + storeObj.getStoreName()));
-                            }
-                        } catch (NumberFormatException e) {
-                            results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid review format."));
-                        }
-                    } else {
-                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid data for REVIEW."));
-                    }
+                    handleReview(key, storeObj, results);
                     break;
                 }
                 case "AGGREGATE_SALES_BY_PRODUCT_NAME": {
-                    // Expect key format: "ProductName=<value>"
-                    String[] parts = key.split("=", 2);
-                    if (parts.length == 2) {
-                        String productNameQuery = parts[1].trim();
-                        if (storeObj.getSalesRecord().containsKey(productNameQuery)) {
-                            int qty = storeObj.getSalesRecord().get(productNameQuery).getQuantity();
-                            results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
-                                    storeObj.getStoreName() + ": " + productNameQuery + " = " + qty));
-                        }
-                    } else {
-                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
-                                "Invalid aggregation query format. Expected ProductName=<value>."));
-                    }
+                    handleAggregation(key, storeObj, results);
                     break;
                 }
                 case "PURCHASE_PRODUCT": {
-                    // Expect key format: "storeName|productName|quantity"
-                    String[] parts = key.split("\\|");
-                    if (parts.length < 3) {
-                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid data for PURCHASE_PRODUCT."));
-                        break;
-                    }
-                    String storeName = parts[0].trim();
-                    String productName = parts[1].trim();
-                    int quantity;
-                    try {
-                        quantity = Integer.parseInt(parts[2].trim());
-                    } catch (NumberFormatException e) {
-                        results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(), "Invalid quantity format."));
-                        break;
-                    }
-                    if (storeObj.getStoreName().equals(storeName)) {
-                        boolean success = storeObj.purchaseProduct(productName, quantity);
-                        if (success) {
-                            results.add(new MapReduceFramework.Pair<>(storeName,
-                                    "Successfully purchased " + quantity + " of " + productName + " from store " + storeName + "."));
-                        } else {
-                            results.add(new MapReduceFramework.Pair<>(storeName,
-                                    "Purchase failed: insufficient stock or product not found."));
-                        }
-                    }
+                    handlePurchase(key, storeObj, results);
                     break;
                 }
-                default: {
-                    results.add(new MapReduceFramework.Pair<>(storeObj.getStoreName(),
+                default:
+                    results.add(new MapReduceFramework.Pair<>(
+                            storeObj.getStoreName(),
                             "Command " + command + " not supported in client mapper."));
-                }
             }
             return results;
         }
 
-        /**
-         * Calculates the great-circle distance between two geographic points using the Haversine formula.
-         *
-         * @param lon1 longitude of the first point
-         * @param lat1 latitude of the first point
-         * @param lon2 longitude of the second point
-         * @param lat2 latitude of the second point
-         * @return distance in kilometers
-         */
-        private double calculateDistance(double lon1, double lat1, double lon2, double lat2) {
-            int R = 6371; // Earth's radius in km.
+        /* ---------- helper methods ---------- */
+
+        private void applySearchFilters(Store s,
+                                        List<MapReduceFramework.Pair<String,String>> out) {
+            switch (filterKey.toLowerCase()) {
+                case "foodcategory":
+                    if (s.getFoodCategory().equalsIgnoreCase(filterValue)) {
+                        out.add(new MapReduceFramework.Pair<>(s.getStoreName(), gson.toJson(s)));
+                    }
+                    break;
+                case "stars":
+                    try {
+                        int stars = Integer.parseInt(filterValue);
+                        if (s.getStars() == stars) {
+                            out.add(new MapReduceFramework.Pair<>(s.getStoreName(), gson.toJson(s)));
+                        }
+                    } catch (NumberFormatException ignored) { }
+                    break;
+                case "avgprice":
+                    int cnt = Integer.parseInt(filterValue);
+                    if (s.getAveragePriceOfStoreSymbol().equals("$".repeat(cnt))) {
+                        out.add(new MapReduceFramework.Pair<>(s.getStoreName(), gson.toJson(s)));
+                    }
+                    break;
+                case "radius":
+                    // radius,lon,lat
+                    String[] parts = filterValue.split(",");
+                    if (parts.length == 3) {
+                        try {
+                            int     radius   = Integer.parseInt(parts[0].trim());
+                            double  clientLo = Double.parseDouble(parts[1].trim());
+                            double  clientLa = Double.parseDouble(parts[2].trim());
+                            double  distKm   = calculateDistance(
+                                    s.getLongitude(), s.getLatitude(), clientLo, clientLa);
+                            if (distKm <= radius) {
+                                out.add(new MapReduceFramework.Pair<>(s.getStoreName(), gson.toJson(s)));
+                            }
+                        } catch (NumberFormatException ignored) { }
+                    }
+                    break;
+                default:
+                    // unknown filter ⇒ nothing emitted
+            }
+        }
+
+        private void handleReview(String key, Store s,
+                                  List<MapReduceFramework.Pair<String,String>> out) {
+            String[] parts = key.split("\\|");
+            if (parts.length >= 2 && s.getStoreName().equals(parts[0].trim())) {
+                try {
+                    int stars = Integer.parseInt(parts[1].trim());
+                    s.updateStoreReviews(stars);
+                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(),
+                            "Gave " + "*".repeat(stars) + " Stars Review for: " + s.getStoreName()));
+                } catch (NumberFormatException e) {
+                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(), "Invalid review format."));
+                }
+            }
+        }
+
+        private void handleAggregation(String key, Store s,
+                                       List<MapReduceFramework.Pair<String,String>> out) {
+            String[] parts = key.split("=", 2);
+            if (parts.length == 2) {
+                String product = parts[1].trim();
+                if (s.getSalesRecord().containsKey(product)) {
+                    int qty = s.getSalesRecord().get(product).getQuantity();
+                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(),
+                            s.getStoreName() + ": " + product + " = " + qty));
+                }
+            } else {
+                out.add(new MapReduceFramework.Pair<>(s.getStoreName(),
+                        "Invalid aggregation query format. Expected ProductName=<value>."));
+            }
+        }
+
+        private void handlePurchase(String key, Store s,
+                                    List<MapReduceFramework.Pair<String,String>> out) {
+            String[] parts = key.split("\\|");
+            if (parts.length >= 3 && s.getStoreName().equals(parts[0].trim())) {
+                String productName = parts[1].trim();
+                try {
+                    int qty = Integer.parseInt(parts[2].trim());
+                    boolean ok = s.purchaseProduct(productName, qty);
+                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(),
+                            ok ? "Successfully purchased " + qty + " of " + productName
+                                    : "Purchase failed: insufficient stock or product not found."));
+                } catch (NumberFormatException e) {
+                    out.add(new MapReduceFramework.Pair<>(s.getStoreName(), "Invalid quantity format."));
+                }
+            } else {
+                out.add(new MapReduceFramework.Pair<>(s.getStoreName(), "Invalid data for PURCHASE_PRODUCT."));
+            }
+        }
+
+        /** Haversine formula. */
+        private double calculateDistance(double lon1, double lat1,
+                                         double lon2, double lat2) {
+            int R = 6371;
             double dLat = Math.toRadians(lat2 - lat1);
             double dLon = Math.toRadians(lon2 - lon1);
-            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            double a = Math.sin(dLat/2) * Math.sin(dLat/2)
                     + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                    * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-    }
-
-    /**
-     * Reducer that concatenates all values for a given key into a single string separated by newlines.
-     */
-    public static class ClientCommandReducer implements MapReduceFramework.Reducer<String, String, String> {
-        private String command;
-
-        /**
-         * Creates a reducer for the specified command.
-         *
-         * @param command the client command (provided for extensibility)
-         */
-        public ClientCommandReducer(String command) {
-            this.command = command;
-        }
-
-        /**
-         * Combines multiple values for a key into a single string.
-         *
-         * @param key    the key to reduce
-         * @param values the list of values associated with the key
-         * @return a single string containing all values separated by newlines
-         */
-        @Override
-        public String reduce(String key, List<String> values) {
-            StringBuilder sb = new StringBuilder();
-            for (String value : values) {
-                sb.append(value).append("\n");
-            }
-            return sb.toString().trim();
+                    * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
     }
 }
