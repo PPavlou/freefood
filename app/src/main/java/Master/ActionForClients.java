@@ -57,37 +57,51 @@ public class ActionForClients implements Runnable {
             System.out.println("Master received command: " + command);
             System.out.println("Master received data: " + data);
 
+            // forward to workers and gather their raw responses
             List<String> workerResponses = forwardToWorkers(command, data);
+
             Gson gson = new Gson();
             String finalResponse;
 
-            Set<String> reduceCommands = new HashSet<>(Arrays.asList(
-                    "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
-                    "LIST_STORES", "DELETED_PRODUCTS"
-            ));
+            // === CHANGED: only show one reply for ADD_STORE/REMOVE_STORE ===
+            if ("ADD_STORE".equalsIgnoreCase(command) ||
+                    "REMOVE_STORE".equalsIgnoreCase(command)) {
 
-            if (reduceCommands.contains(command.toUpperCase())) {
-                synchronized (MasterServer.reduceLock) {
-                    while (!MasterServer.pendingReduceResults.containsKey(command)) {
-                        try {
-                            MasterServer.reduceLock.wait(1000);
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            writer.println("{\"error\": \"Interrupted while waiting for reduce result.\"}");
-                            return;
-                        }
-                    }
-                    finalResponse = MasterServer.pendingReduceResults.get(command);
-                    MasterServer.pendingReduceResults.remove(command);
-                }
+                // if any worker succeeded, just take the first response
+                finalResponse = workerResponses.isEmpty()
+                        ? "[]"
+                        : workerResponses.get(0);
+
             } else {
-                finalResponse = gson.toJson(workerResponses);
+                // existing reduce vs broadcast logic
+
+                Set<String> reduceCommands = new HashSet<>(Arrays.asList(
+                        "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
+                        "LIST_STORES", "DELETED_PRODUCTS"
+                ));
+
+                if (reduceCommands.contains(command.toUpperCase())) {
+                    synchronized (MasterServer.reduceLock) {
+                        while (!MasterServer.pendingReduceResults.containsKey(command)) {
+                            try {
+                                MasterServer.reduceLock.wait(1000);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                writer.println("{\"error\": \"Interrupted while waiting for reduce result.\"}");
+                                return;
+                            }
+                        }
+                        finalResponse = MasterServer.pendingReduceResults.remove(command);
+                    }
+                } else {
+                    finalResponse = gson.toJson(workerResponses);
+                }
             }
 
-            // Send back to manager console
+            // send the (possibly single) response back to the manager console
             writer.println(finalResponse);
 
-            // Trigger workers to reload partitions on add/remove store
+            // trigger reload if we just added or removed a store
             if ("ADD_STORE".equalsIgnoreCase(command) ||
                     "REMOVE_STORE".equalsIgnoreCase(command)) {
 
@@ -95,11 +109,9 @@ public class ActionForClients implements Runnable {
                     Store s = gson.fromJson(data, Store.class);
                     MasterServer.dynamicStores.add(s);
 
-                } else if ("REMOVE_STORE".equalsIgnoreCase(command)) {
+                } else { // REMOVE_STORE
                     String storeName = data.trim();
-                    // forget any prior dynamic-add
                     MasterServer.dynamicStores.removeIf(s -> s.getStoreName().equals(storeName));
-                    // record this removal for later joiners
                     MasterServer.dynamicRemoves.add(storeName);
                 }
 
@@ -112,9 +124,7 @@ public class ActionForClients implements Runnable {
         } finally {
             try {
                 clientSocket.close();
-            } catch (IOException e) {
-                // ignore
-            }
+            } catch (IOException e) { /* ignore */ }
         }
     }
 

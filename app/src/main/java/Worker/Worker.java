@@ -231,13 +231,21 @@ public class Worker {
             } else if (command.equalsIgnoreCase("LIST_STORES") ||
                     command.equalsIgnoreCase("DELETED_PRODUCTS")) {
                 List<MapReduceFramework.Pair<String, String>> intermediate = new ArrayList<>();
+
                 if (command.equalsIgnoreCase("LIST_STORES")) {
                     for (String storeName : storeManager.getAllStores().keySet()) {
                         intermediate.add(new MapReduceFramework.Pair<>("LIST_STORES", storeName));
                     }
                 } else { // DELETED_PRODUCTS
-                    intermediate.add(new MapReduceFramework.Pair<>("DELETED_PRODUCTS", productManager.getDeletedProductsReport()));
+                    // only send a mapping if there are actual deletions
+                    String report = productManager.getDeletedProductsReport();
+                    if (report != null
+                            && !report.trim().isEmpty()
+                            && !report.startsWith("No products have been deleted")) {
+                        intermediate.add(new MapReduceFramework.Pair<>("DELETED_PRODUCTS", report));
+                    }
                 }
+
                 String mappingResult = gson.toJson(intermediate);
                 return sendToReduceServer(command, mappingResult);
             } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
