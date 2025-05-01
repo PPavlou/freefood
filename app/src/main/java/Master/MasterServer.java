@@ -3,11 +3,7 @@ package Master;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Collections;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import com.google.gson.Gson;
 import model.Store;
@@ -39,6 +35,10 @@ public class MasterServer {
     /** List of stores added or removed dynamically, shared with new workers on registration. */
     public static final List<Store> dynamicStores =
             Collections.synchronizedList(new ArrayList<>());
+
+    /** Names of stores removed dynamically, to replay REMOVE_STORE to late joiners. */
+    public static final Set<String> dynamicRemoves =
+            Collections.synchronizedSet(new HashSet<>());
 
     /** Map storing pending reduce results, keyed by command name. */
     public static final Map<String, String> pendingReduceResults = new HashMap<>();
@@ -83,6 +83,23 @@ public class MasterServer {
                         for (Store s : dynamicStores) {
                             writer.println("ADD_STORE");
                             writer.println(gson.toJson(s));
+                        }
+                    }
+
+                    // REPLAY any stores that were added dynamically before this worker arrived
+                    synchronized (dynamicStores) {
+                        Gson gson = new Gson();
+                        for (Store s : dynamicStores) {
+                            writer.println("ADD_STORE");
+                            writer.println(gson.toJson(s));
+                        }
+                    }
+
+// REPLAY any stores that were removed dynamically before this worker arrived
+                    synchronized (dynamicRemoves) {
+                        for (String storeName : dynamicRemoves) {
+                            writer.println("REMOVE_STORE");
+                            writer.println(storeName);
                         }
                     }
 

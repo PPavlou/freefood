@@ -18,7 +18,7 @@ public class Client {
     /**
      * The hostname where the MasterServer is listening.
      */
-    private static final String SERVER_HOST = "localhost";
+    private static final String SERVER_HOST = "172.20.10.2";
 
     /**
      * The port number on which the MasterServer is running.

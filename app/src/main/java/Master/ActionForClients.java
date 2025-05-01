@@ -92,13 +92,15 @@ public class ActionForClients implements Runnable {
                     "REMOVE_STORE".equalsIgnoreCase(command)) {
 
                 if ("ADD_STORE".equalsIgnoreCase(command)) {
-                    // parse and remember this new store
                     Store s = gson.fromJson(data, Store.class);
                     MasterServer.dynamicStores.add(s);
-                } else {
-                    // forget any store with that name
-                    MasterServer.dynamicStores
-                            .removeIf(s -> s.getStoreName().equals(data.trim()));
+
+                } else if ("REMOVE_STORE".equalsIgnoreCase(command)) {
+                    String storeName = data.trim();
+                    // forget any prior dynamic-add
+                    MasterServer.dynamicStores.removeIf(s -> s.getStoreName().equals(storeName));
+                    // record this removal for later joiners
+                    MasterServer.dynamicRemoves.add(storeName);
                 }
 
                 MasterServer.broadcastReload();
