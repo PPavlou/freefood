@@ -5,7 +5,7 @@
   "FoodCategory": "burger",
   "Stars": 4,
   "NoOfVotes": 30,
-  "StoreLogo": "",
+  "StoreLogo": "https://drive.google.com/uc?export=view&id=1ySesSWtlXyFshCfHdUlSOaHAE4VuHO3r",
   "Products": [
     {
       "ProductName": "Classic Burger",

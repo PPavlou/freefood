@@ -26,7 +26,7 @@ public class ReduceHandler implements Runnable {
     private static final Map<String, AggregationJob> jobs = new HashMap<>();
 
     // Master connection info (master already listens on port 12345).
-    private static final String MASTER_HOST = "172.20.10.2"; // adjust as needed
+    private static final String MASTER_HOST = "localhost"; // adjust as needed
     private static final int MASTER_PORT = 12345;
 
     /**

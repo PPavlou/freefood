@@ -287,7 +287,7 @@ public class Worker {
      */
     private String sendToReduceServer(String command, String mappingResult) {
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "172.20.10.2";
+        String reduceServerHost = "localhost";
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
@@ -373,7 +373,7 @@ public class Worker {
      */
     public void start() {
         try {
-            socket = new Socket("172.20.10.2", port);
+            socket = new Socket("localhost", port);
             writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -456,7 +456,7 @@ public class Worker {
      */
     private void sendTerminationCommand() throws IOException {
         try {
-            try (Socket socketTemp = new Socket("172.20.10.2", port);
+            try (Socket socketTemp = new Socket("localhost", port);
                  PrintWriter writerTemp = new PrintWriter(socketTemp.getOutputStream(), true)) { // Auto-flush enabled
                 writerTemp.println("WORKER_SHUTDOWN:" + workerId);
                 totalWorkers--;
