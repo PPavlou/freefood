@@ -81,25 +81,20 @@ public class MasterServer {
                     synchronized (dynamicStores) {
                         Gson gson = new Gson();
                         for (Store s : dynamicStores) {
-                            writer.println("ADD_STORE");
+                            String jobId=ActionForClients.generateJobId();
+                            writer.println("ADD_STORE(REPLAY)");
                             writer.println(gson.toJson(s));
+                            writer.println(jobId);
                         }
                     }
 
-                    // REPLAY any stores that were added dynamically before this worker arrived
-                    synchronized (dynamicStores) {
-                        Gson gson = new Gson();
-                        for (Store s : dynamicStores) {
-                            writer.println("ADD_STORE");
-                            writer.println(gson.toJson(s));
-                        }
-                    }
-
-// REPLAY any stores that were removed dynamically before this worker arrived
+                    // REPLAY any stores that were removed dynamically before this worker arrived
                     synchronized (dynamicRemoves) {
                         for (String storeName : dynamicRemoves) {
-                            writer.println("REMOVE_STORE");
+                            String jobId=ActionForClients.generateJobId();
+                            writer.println("REMOVE_STORE(REPLAY)");
                             writer.println(storeName);
+                            writer.println(jobId);
                         }
                     }
 
@@ -148,12 +143,14 @@ public class MasterServer {
                     }
                 }
                 else if ("REDUCE_RESULT".equals(firstLine)) {
+                    String jobId = reader.readLine();
                     String command = reader.readLine();
                     String aggregatedResult = reader.readLine();
-                    System.out.println("Received REDUCE_RESULT for command: " + command);
+                    System.out.println("Received REDUCE_RESULT for jobId: " + jobId +
+                            ", command: " + command);
                     System.out.println("Aggregated result: " + aggregatedResult);
                     synchronized (reduceLock) {
-                        pendingReduceResults.put(command, aggregatedResult);
+                        pendingReduceResults.put(command + "|" + jobId, aggregatedResult);
                         reduceLock.notifyAll();
                     }
                     writer.println("ACK");
@@ -183,8 +180,11 @@ public class MasterServer {
             for (Socket s : workerSockets) {
                 try {
                     PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                    String jobId=ActionForClients.generateJobId();
+
                     out.println("RELOAD");
                     out.println(currentWorkers);
+                    out.println(jobId);
                 } catch (IOException ex) {
                     System.err.println("Error sending reload command: " + ex.getMessage());
                 }
@@ -232,8 +232,11 @@ public class MasterServer {
                 updatedAssignments.put(newId, sock);
                 try {
                     PrintWriter out = new PrintWriter(sock.getOutputStream(), true);
+                    String jobId=ActionForClients.generateJobId();
+
                     out.println("DECREMENT_ID");
                     out.println(newId + ":" + workerCount);
+                    out.println(jobId);
                     System.out.println("DECREASE ID FOR WORKER: " + oldId);
                 } catch (IOException ex) {
                     System.err.println("Failed to notify worker " + oldId + " of new ID: " + ex.getMessage());

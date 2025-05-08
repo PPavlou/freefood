@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Arrays;
+import java.util.UUID;
 
 import com.google.gson.Gson;
 import model.Store;
@@ -43,6 +44,15 @@ public class ActionForClients implements Runnable {
     }
 
     /**
+     * Generates a unique job ID for tracking distributed operations.
+     *
+     * @return a unique job ID string
+     */
+    public static String generateJobId() {
+        return UUID.randomUUID().toString();
+    }
+
+    /**
      * Entry point for the client handler thread.
      * Reads the full client command, forwards it to workers,
      * waits for or computes the reduced response, and writes it back.
@@ -57,8 +67,10 @@ public class ActionForClients implements Runnable {
             System.out.println("Master received command: " + command);
             System.out.println("Master received data: " + data);
 
+            String jobId = generateJobId();
+            System.out.println("Generated jobId: " + jobId + " for command: " + command);
             // forward to workers and gather their raw responses
-            List<String> workerResponses = forwardToWorkers(command, data);
+            List<String> workerResponses = forwardToWorkers(command, data, jobId);
 
             Gson gson = new Gson();
             String finalResponse;
@@ -81,8 +93,9 @@ public class ActionForClients implements Runnable {
                 ));
 
                 if (reduceCommands.contains(command.toUpperCase())) {
+                    String resultKey = command + "|" + jobId;
                     synchronized (MasterServer.reduceLock) {
-                        while (!MasterServer.pendingReduceResults.containsKey(command)) {
+                        while (!MasterServer.pendingReduceResults.containsKey(resultKey)) {
                             try {
                                 MasterServer.reduceLock.wait(1000);
                             } catch (InterruptedException e) {
@@ -91,7 +104,7 @@ public class ActionForClients implements Runnable {
                                 return;
                             }
                         }
-                        finalResponse = MasterServer.pendingReduceResults.remove(command);
+                        finalResponse = MasterServer.pendingReduceResults.remove(resultKey);
                     }
                 } else {
                     finalResponse = gson.toJson(workerResponses);
@@ -134,9 +147,10 @@ public class ActionForClients implements Runnable {
      *
      * @param command the client command to forward
      * @param data    the payload for the command
+     * @param jobId   the unique job identifier for this operation
      * @return list of responses from workers
      */
-    private List<String> forwardToWorkers(String command, String data) {
+    private List<String> forwardToWorkers(String command, String data, String jobId) {
         List<String> responses = new ArrayList<>();
 
         Set<String> directedCommands = new HashSet<>(Arrays.asList(
@@ -144,7 +158,6 @@ public class ActionForClients implements Runnable {
                 "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT", "DECREMENT_PRODUCT_AMOUNT",
                 "PURCHASE_PRODUCT", "REVIEW"
         ));
-
         if (directedCommands.contains(command.toUpperCase())) {
             // Send to the single worker responsible for this store
             String storeName = extractStoreName(command, data);
@@ -179,7 +192,7 @@ public class ActionForClients implements Runnable {
                     );
                     out.println(command);
                     out.println(data);
-
+                    out.println(jobId);
                     String line;
                     while ((line = in.readLine()) != null) {
                         if (line.startsWith("CMD_RESPONSE:")) {
@@ -194,8 +207,8 @@ public class ActionForClients implements Runnable {
                         for (int r = 1; r < replicationFactor; r++) {
                             replicaIds.add((index + r) % workerCount);
                         }
-                        // build the same “command|data” payload
-                        String payload = command + "|" + data;
+                        // build the payload with job ID
+                        String payload = command + "|" + data + "|" + jobId;
 
                         MasterServer.broadcastToReplicas(replicaIds, payload);
                     }
@@ -223,8 +236,11 @@ public class ActionForClients implements Runnable {
                         BufferedReader in = new BufferedReader(
                                 new InputStreamReader(workerSocket.getInputStream())
                         );
+
                         out.println(command);
                         out.println(data);
+                        out.println(jobId);
+
                         String line;
                         while ((line = in.readLine()) != null) {
                             if (line.startsWith("CMD_RESPONSE:")) {

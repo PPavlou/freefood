@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Handles reduce operations by aggregating partial mapping results
@@ -22,11 +23,11 @@ public class ReduceHandler implements Runnable {
     /** Socket connected to the worker node. */
     private Socket socket;
 
-    /** Jobs currently in progress, keyed by command name. */
+    /** Jobs currently in progress, keyed by job ID. */
     private static final Map<String, AggregationJob> jobs = new HashMap<>();
 
     // Master connection info (master already listens on port 12345).
-    private static final String MASTER_HOST = "172.20.10.2"; // adjust as needed
+    private static final String MASTER_HOST = "localhost"; // adjust as needed
     private static final int MASTER_PORT = 12345;
 
     /**
@@ -40,7 +41,7 @@ public class ReduceHandler implements Runnable {
 
     /**
      * Processes a single worker's partial mapping output.
-     * Reads the command name, the number of expected partials, and the JSON mapping output.
+     * Reads the job ID, the command name, the number of expected partials, and the JSON mapping output.
      * Collects partials until all are received, performs aggregation, sends the result to
      * the Master, acknowledges the worker, and removes the job when complete.
      */
@@ -52,18 +53,23 @@ public class ReduceHandler implements Runnable {
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new PrintWriter(socket.getOutputStream(), true);
 
-            // 1st line: the command (e.g., "LIST_STORES")
+            // 1st line: the job ID
+            String jobId = reader.readLine();
+            if (jobId == null) return;
+
+            // 2nd line: the command (e.g., "LIST_STORES")
             String command = reader.readLine();
             if (command == null) return;
 
-            // 2nd line: expected number of mapping outputs (number of workers)
+            // 3rd line: expected number of mapping outputs (number of workers)
             String expectedCountStr = reader.readLine();
             int expectedCount = Integer.parseInt(expectedCountStr.trim());
 
-            // 3rd line: the mapping result JSON from this worker
+            // 4th line: the mapping result JSON from this worker
             String mappingJson = reader.readLine();
 
-            System.out.println("Reduce server received command: " + command);
+            System.out.println("Reduce server received job ID: " + jobId);
+            System.out.println("Command: " + command);
             System.out.println("Mapping result JSON: " + mappingJson);
 
             Gson gson = new Gson();
@@ -72,10 +78,10 @@ public class ReduceHandler implements Runnable {
 
             AggregationJob job;
             synchronized (jobs) {
-                job = jobs.get(command);
+                job = jobs.get(jobId);
                 if (job == null) {
-                    job = new AggregationJob(command, expectedCount);
-                    jobs.put(command, job);
+                    job = new AggregationJob(jobId, command, expectedCount);
+                    jobs.put(jobId, job);
                 }
             }
 
@@ -97,10 +103,10 @@ public class ReduceHandler implements Runnable {
                     job.finalResult = gson.toJson(reducedResults);
                     job.isCompleted = true;
                     job.notifyAll();
-                    System.out.println("Reduced result computed for command " + command + ": " + job.finalResult);
+                    System.out.println("Reduced result computed for job " + jobId + " (command: " + command + "): " + job.finalResult);
 
                     // Send the aggregated result directly to the master.
-                    sendAggregatedResultToMaster(command, job.finalResult);
+                    sendAggregatedResultToMaster(jobId, command, job.finalResult);
                     job.sentToMaster = true;
                 } else {
                     // Otherwise, wait until aggregation is complete.
@@ -120,7 +126,7 @@ public class ReduceHandler implements Runnable {
             // Once responses have been sent to all expected workers, remove the job.
             synchronized (jobs) {
                 if (job.responseCount >= job.expectedCount) {
-                    jobs.remove(command);
+                    jobs.remove(jobId);
                 }
             }
         } catch (Exception e) {
@@ -139,17 +145,19 @@ public class ReduceHandler implements Runnable {
     /**
      * Sends the aggregated reduce result to the Master server.
      *
+     * @param jobId            the ID of the job for which results were aggregated
      * @param command          the command for which results were aggregated
      * @param aggregatedResult the JSON string of the aggregated results
      */
-    private void sendAggregatedResultToMaster(String command, String aggregatedResult) {
+    private void sendAggregatedResultToMaster(String jobId, String command, String aggregatedResult) {
         try (Socket masterSocket = new Socket(MASTER_HOST, MASTER_PORT);
              PrintWriter masterWriter = new PrintWriter(masterSocket.getOutputStream(), true)) {
             // We use a special header "REDUCE_RESULT" to distinguish reduce server messages.
             masterWriter.println("REDUCE_RESULT");
+            masterWriter.println(jobId);
             masterWriter.println(command);
             masterWriter.println(aggregatedResult);
-            System.out.println("Aggregated result sent to master: " + aggregatedResult);
+            System.out.println("Aggregated result sent to master for job " + jobId);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -161,6 +169,8 @@ public class ReduceHandler implements Runnable {
      * aggregates them into a final result, and tracks job state.
      */
     private static class AggregationJob {
+        /** Unique ID for this job. */
+        public final String jobId;
         /** Command associated with this job. */
         public final String command;
         /** Number of partial results expected. */
@@ -179,10 +189,12 @@ public class ReduceHandler implements Runnable {
         /**
          * Constructs a new AggregationJob.
          *
+         * @param jobId         the unique ID for this job
          * @param command       the command for aggregation
          * @param expectedCount how many partial results to expect
          */
-        public AggregationJob(String command, int expectedCount) {
+        public AggregationJob(String jobId, String command, int expectedCount) {
+            this.jobId = jobId;
             this.command = command;
             this.expectedCount = expectedCount;
             this.partials = new ArrayList<>();
