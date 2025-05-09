@@ -10,10 +10,8 @@ import mapreduce.MapReduceFramework;
 import model.Store;
 import java.io.*;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import Reduce.Reduce;
 
 /**
@@ -82,11 +80,12 @@ public class Worker {
      *
      * @param command the command to process
      * @param data    the associated data payload
+     * @param jobId   the unique job ID for this command
      * @return a JSON string representing the mapping result or status message
      */
-    public String processCommand(String command, String data) {
+    public String processCommand(String command, String data, String jobId) {
         // dynamic add/remove updates the full list, then await reload
-        if (command.equalsIgnoreCase("ADD_STORE")) {
+        if (command.contains("ADD_STORE")) {
             Store store = gson.fromJson(data, Store.class);
             store.setAveragePriceOfStore();
             store.setAveragePriceOfStoreSymbol();
@@ -96,7 +95,7 @@ public class Worker {
                             "Store " + store.getStoreName() + " added.")
             ));
         }
-        if (command.equalsIgnoreCase("REMOVE_STORE")) {
+        if (command.contains("REMOVE_STORE")) {
             String storeName = data.trim();
             boolean removed = allStores.removeIf(s -> s.getStoreName().equals(storeName));
             String msg = removed
@@ -130,7 +129,7 @@ public class Worker {
 
             String mappingResult = gson.toJson(intermediate);
             if (needsReduce) {
-                return sendToReduceServer(command, mappingResult);
+                return sendToReduceServer(command, mappingResult, jobId);
             } else {
                 return mappingResult;
             }
@@ -149,7 +148,7 @@ public class Worker {
                 }
             }
             String mappingResult = gson.toJson(intermediate);
-            return sendToReduceServer(command, mappingResult);
+            return sendToReduceServer(command, mappingResult, jobId);
         }
         else if (command.equalsIgnoreCase("REVIEW")) {
             // For REVIEW, process only the target store.
@@ -199,7 +198,7 @@ public class Worker {
             return gson.toJson(intermediate);
         } else {
             // Manager commands.
-            if (command.equalsIgnoreCase("ADD_STORE")) {
+            if (command.contains("ADD_STORE")) {
                 Store store = gson.fromJson(data, Store.class);
                 input.add(new MapReduceFramework.Pair<>(store.getStoreName(), store));
                 ManagerCommandMapperReducer.CommandMapper mapper =
@@ -211,7 +210,7 @@ public class Worker {
                     }
                 }
                 return gson.toJson(intermediate);
-            } else if (command.equalsIgnoreCase("REMOVE_STORE")) {
+            } else if (command.contains("REMOVE_STORE")) {
                 String storeName = data.trim();
                 Store store = storeManager.getStore(storeName);
                 if (store != null) {
@@ -248,7 +247,7 @@ public class Worker {
                 }
 
                 String mappingResult = gson.toJson(intermediate);
-                return sendToReduceServer(command, mappingResult);
+                return sendToReduceServer(command, mappingResult, jobId);
             } else if (command.equalsIgnoreCase("ADD_PRODUCT") ||
                     command.equalsIgnoreCase("REMOVE_PRODUCT") ||
                     command.equalsIgnoreCase("UPDATE_PRODUCT_AMOUNT") ||
@@ -283,14 +282,18 @@ public class Worker {
      *
      * @param command        the command name
      * @param mappingResult  JSON string of mapping output
+     * @param jobId          the unique job ID for this operation
      * @return status message as JSON
      */
-    private String sendToReduceServer(String command, String mappingResult) {
+    private String sendToReduceServer(String command, String mappingResult, String jobId) {
+        System.out.println("Command: "+command);
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "172.20.10.2";
+        String reduceServerHost = "localhost";
         int reduceServerPort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
+            System.out.println(jobId);
+            writer.println(jobId);
             writer.println(command);
             writer.println(String.valueOf(expectedCount));
             writer.println(mappingResult);
@@ -373,7 +376,7 @@ public class Worker {
      */
     public void start() {
         try {
-            socket = new Socket("172.20.10.2", port);
+            socket = new Socket("localhost", port);
             writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -412,6 +415,12 @@ public class Worker {
                     break;
                 }
 
+                String jobId = reader.readLine();
+                if (jobId == null) {
+                    System.out.println("Master closed connection.");
+                    break;
+                }
+
                 // Handle reload commands.
                 if ("RELOAD".equalsIgnoreCase(command.trim())) {
                     try {
@@ -435,11 +444,32 @@ public class Worker {
                     System.out.println("Worker changed id to: " + workerId);
                     continue;
                 }
+
+                // Handle replica commands (from broadcastToReplicas)
+                else if (command.contains("|")) {
+                    String[] parts = command.split("\\|", 3);
+                    if (parts.length == 3) {
+                        String cmd = parts[0];
+                        String cmdData = parts[1];
+                        String cmdJobId = parts[2];
+                        System.out.println("Worker " + workerId + " received replica command: " + cmd);
+                        System.out.println("Worker " + workerId + " received replica data: " + cmdData);
+                        System.out.println("Worker " + workerId + " received replica jobId: " + cmdJobId);
+
+                        String response = processCommand(cmd, cmdData, cmdJobId);
+                        if (!command.contains("REPLAY"))
+                            writer.println("CMD_RESPONSE:" + response);
+                        continue;
+                    }
+                }
+
                 System.out.println("Worker " + workerId + " received command: " + command);
                 System.out.println("Worker " + workerId + " received data: " + data);
+                System.out.println("Worker " + workerId + " received jobId: " + jobId);
 
-                String response = processCommand(command, data);
-                writer.println("CMD_RESPONSE:" + response);
+                String response = processCommand(command, data, jobId);
+                if (!command.contains("REPLAY"))
+                    writer.println("CMD_RESPONSE:" + response);
             }
             socket.close();
         } catch (IOException e) {
@@ -456,7 +486,7 @@ public class Worker {
      */
     private void sendTerminationCommand() throws IOException {
         try {
-            try (Socket socketTemp = new Socket("172.20.10.2", port);
+            try (Socket socketTemp = new Socket("localhost", port);
                  PrintWriter writerTemp = new PrintWriter(socketTemp.getOutputStream(), true)) { // Auto-flush enabled
                 writerTemp.println("WORKER_SHUTDOWN:" + workerId);
                 totalWorkers--;
