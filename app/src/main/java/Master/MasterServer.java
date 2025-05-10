@@ -18,6 +18,12 @@ public class MasterServer {
     /** Port on which the MasterServer listens. */
     private static final int MASTER_PORT = 12345;
 
+    // NEW – instead of storing raw Sockets, keep host+port per worker
+    public static final Map<Integer,String> workerHostsById =
+            Collections.synchronizedMap(new HashMap<>());
+    public static final Map<Integer,Integer> workerPortsById =
+            Collections.synchronizedMap(new HashMap<>());
+
     /** Thread-safe list of sockets for connected worker nodes. */
     public static List<Socket> workerSockets =
             Collections.synchronizedList(new ArrayList<>());
@@ -68,12 +74,15 @@ public class MasterServer {
                 // Read the first line to determine connection type.
                 String firstLine = reader.readLine();
                 if ("WORKER_HANDSHAKE".equals(firstLine)) {
+                    // 1) read which port *this* worker will listen on:
+                    String portLine = reader.readLine();
+                    int workerPort = Integer.parseInt(portLine.trim());
+
+                                // 2) assign ID
                     int assignedId;
                     synchronized (MasterServer.class) {
-                        assignedId = workerCount;
-                        workerCount++;
+                        assignedId = workerCount++;
                     }
-                    // Tell the newcomer its slot and live count
                     writer.println("WORKER_ASSIGN:" + assignedId + ":" + workerCount);
 
                     // REPLAY any stores that were added dynamically before this worker arrived
@@ -98,15 +107,22 @@ public class MasterServer {
                         }
                     }
 
-                    // Now add it to the live list and trigger the partitioning reload
-                    synchronized (workerAvailable) {
-                        workerSockets.add(socket);
-                        workerSocketsById.put(assignedId, socket);
-                        workerAvailable.notifyAll();
-                        broadcastReload();
+                    String host = socket.getInetAddress().getHostAddress();
+                    synchronized(MasterServer.class) {
+                        workerHostsById.put(assignedId, host);
+                        workerPortsById.put(assignedId, workerPort);
                     }
+                    socket.close();
 
-                    System.out.println("Worker assigned ID " + assignedId + " from " + socket.getInetAddress());
+                    // 6) notify all workers to reload their partitions
+                    broadcastReload();
+
+                    System.out.printf(
+                            "Worker assigned ID %d at %s:%d%n",
+                            assignedId, host, workerPort
+                    );
+
+                    continue;
                 }
                 else if (firstLine != null && (firstLine.contains("WORKER_SHUTDOWN:"))) {
                     // Expect the format: WORKER_SHUTDOWN:<id>
@@ -157,7 +173,7 @@ public class MasterServer {
                     socket.close();
                 }
                 else {
-                    ActionForClients clientHandler = new ActionForClients(socket, workerSockets, firstLine, reader);
+                    ActionForClients clientHandler = new ActionForClients(socket, firstLine, reader);
                     new Thread(clientHandler).start();
                 }
             }
@@ -175,22 +191,22 @@ public class MasterServer {
      * Instructs all connected workers to reload their store partitions.
      */
     public static void broadcastReload() {
-        synchronized (workerAvailable) {
-            int currentWorkers = workerSockets.size();
-            for (Socket s : workerSockets) {
-                try {
-                    PrintWriter out = new PrintWriter(s.getOutputStream(), true);
-                    String jobId=ActionForClients.generateJobId();
-
-                    out.println("RELOAD");
-                    out.println(currentWorkers);
-                    out.println(jobId);
-                } catch (IOException ex) {
-                    System.err.println("Error sending reload command: " + ex.getMessage());
-                }
+        int currentWorkers = workerHostsById.size();
+        for (int id : workerHostsById.keySet()) {
+            String host = workerHostsById.get(id);
+            int    port = workerPortsById.get(id);
+            try (Socket ws = new Socket(host, port);
+                 PrintWriter out = new PrintWriter(ws.getOutputStream(), true)) {
+                String jobId = ActionForClients.generateJobId();
+                out.println("RELOAD");
+                out.println(currentWorkers);
+                out.println(jobId);
+            } catch (IOException ex) {
+                System.err.println("Reload → worker " + id + " failed: " + ex.getMessage());
             }
         }
     }
+
 
     /**
      * Broadcasts a message to specific worker replicas.
