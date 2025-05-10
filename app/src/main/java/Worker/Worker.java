@@ -12,74 +12,46 @@ import java.io.*;
 import java.net.Socket;
 import java.util.*;
 import java.net.ServerSocket;
-
+import java.io.IOException;
 import Reduce.Reduce;
 
 /**
  * Worker node for the Freefooders system.
- * Connects to the Master server, loads and partitions store data,
+ * Connects to the Master server (optionally), loads and partitions store data,
  * processes client and manager commands by mapping over local stores,
  * and sends mapping results to the external reduce server when required.
  */
 public class Worker {
+    private final String masterHost = "192.168.1.50";  // Master address, optional
     private final int masterPort;
     private final int commandPort;
     private StoreManager storeManager;
     private ProductManager productManager;
-    private final List<Store> allStores = new ArrayList<>();  // full store list for dynamic add/remove
-    private int workerId = -1;    // assigned by handshake
+    private final List<Store> allStores = new ArrayList<>();
+    private int workerId = 0;    // defaults for standalone
     private int totalWorkers = 1;
-    private Gson gson = new Gson();
-
-
+    private final Gson gson = new Gson();
 
     public Worker(int masterPort, int commandPort) {
         this.masterPort = masterPort;
         this.commandPort = commandPort;
     }
-    /**
-     * Constructs a Worker that connects to the Master on the default port 12345.
-     */
+
     public Worker() {
         this(12345, 20000);
     }
 
-    /**
-     * Determines which worker should handle a specific store based on consistent hashing.
-     *
-     * @param storeName the name of the store
-     * @param totalWorkers the total number of workers
-     * @return the worker ID that should handle this store
-     */
     public static int getWorkerIdForStore(String storeName, int totalWorkers) {
-        if (totalWorkers <= 0) {
-            return 0;
-        }
+        if (totalWorkers <= 0) return 0;
         return Math.abs(storeName.hashCode()) % totalWorkers;
     }
 
-    /**
-     * Checks if this worker should handle the specified store.
-     *
-     * @param storeName the name of the store
-     * @return true if this worker should handle the store, false otherwise
-     */
     public boolean shouldHandleStore(String storeName) {
         return getWorkerIdForStore(storeName, totalWorkers) == workerId;
     }
 
-    /**
-     * Processes a command by mapping over local stores.
-     * For commands requiring reduction (SEARCH, AGGREGATE_SALES_BY_PRODUCT_NAME,
-     * LIST_STORES, DELETED_PRODUCTS), sends mapping results to the external reduce server.
-     *
-     * @param command the command to process
-     * @param data    the associated data payload
-     * @param jobId   the unique job ID for this command
-     * @return a JSON string representing the mapping result or status message
-     */
     public String processCommand(String command, String data, String jobId) {
-        // dynamic add/remove updates the full list, then await reload
+        // dynamic add/remove updates the full list
         if (command.contains("ADD_STORE")) {
             Store store = gson.fromJson(data, Store.class);
             store.setAveragePriceOfStore();
@@ -102,12 +74,11 @@ public class Worker {
         }
 
         List<MapReduceFramework.Pair<String, Store>> input = new ArrayList<>();
-
-        // Determine if this command requires external reduction.
         boolean needsReduce = command.equalsIgnoreCase("SEARCH") ||
                 command.equalsIgnoreCase("AGGREGATE_SALES_BY_PRODUCT_NAME") ||
                 command.equalsIgnoreCase("LIST_STORES") ||
                 command.equalsIgnoreCase("DELETED_PRODUCTS");
+
 
         if (command.equalsIgnoreCase("SEARCH")) {
             // Client commands: process over all local stores.
@@ -276,29 +247,25 @@ public class Worker {
      * Sends mapping results to the reduce server for commands that require reduction.
      *
      * @param command        the command name
-     * @param mappingResult  JSON string of mapping output
      * @param jobId          the unique job ID for this operation
      * @return status message as JSON
      */
-    private String sendToReduceServer(String command, String mappingResult, String jobId) {
-        System.out.println("Command: "+command);
+    private String sendToReduceServer(String command, String mappingJson, String jobId) {
         int expectedCount = this.totalWorkers;
-        String reduceServerHost = "192.168.1.51";
-        int reduceServerPort = Reduce.REDUCE_PORT;
-        try (Socket socket = new Socket(reduceServerHost, reduceServerPort);
-             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
-            System.out.println(jobId);
-            writer.println(jobId);
-            writer.println(command);
-            writer.println(String.valueOf(expectedCount));
-            writer.println(mappingResult);
+        String reduceHost = "192.168.1.50";
+        int reducePort = Reduce.REDUCE_PORT;
+        try (Socket socket = new Socket(reduceHost, reducePort);
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+            out.println(jobId);
+            out.println(command);
+            out.println(expectedCount);
+            out.println(mappingJson);
         } catch (IOException e) {
-            e.printStackTrace();
-            return "{\"error\":\"Error connecting to reduce server: " + e.getMessage() + "\"}";
+            return "{\"error\":\"Error connecting to reduce server: "
+                    + e.getMessage() + "\"}";
         }
-        return "{\"status\":\"Mapping output sent to reduce server.\"}";
+        return "{\"status\":\"Mapping output sent\"}";
     }
-
     /**
      * Loads store JSON resources and partitions them based on workerId and totalWorkers.
      * Initializes the StoreManager with the partition assigned to this worker.
@@ -370,161 +337,110 @@ public class Worker {
      * listens for commands to process, and handles reload and shutdown events.
      */
     public void start() {
-        // 1) Open our ServerSocket to accept Master→Worker commands
-        ServerSocket server = null;
+        // 1) open ServerSocket for incoming commands
+        ServerSocket server;
         try {
             server = new ServerSocket(commandPort);
         } catch (IOException e) {
             throw new RuntimeException("Failed to bind on port " + commandPort, e);
         }
 
-        // 2) Register with Master
-        try (Socket reg = new Socket("192.168.1.51", masterPort);
+        // 2) optional handshake with Master
+        try (Socket reg = new Socket(masterHost, masterPort);
              PrintWriter out = new PrintWriter(reg.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(new InputStreamReader(reg.getInputStream()))) {
-
+             BufferedReader in = new BufferedReader(
+                     new InputStreamReader(reg.getInputStream()))) {
             out.println("WORKER_HANDSHAKE");
-            out.println(commandPort);  // tell Master where we’ll listen
-
-            String assignMsg = in.readLine();
-            if (assignMsg != null && assignMsg.startsWith("WORKER_ASSIGN:")) {
-                String[] parts = assignMsg.split(":");
-                if (parts.length == 3) {
-                    workerId     = Integer.parseInt(parts[1].trim());
-                    totalWorkers = Integer.parseInt(parts[2].trim());
-                    System.out.println("Worker assigned ID " + workerId
-                            + " out of " + totalWorkers);
-                } else {
-                    throw new IOException("Bad WORKER_ASSIGN format: " + assignMsg);
-                }
-            } else {
-                throw new IOException("Did not receive WORKER_ASSIGN from Master.");
+            out.println(commandPort);
+            String assign = in.readLine();
+            if (assign != null && assign.startsWith("WORKER_ASSIGN:")) {
+                String[] parts = assign.split(":");
+                workerId = Integer.parseInt(parts[1].trim());
+                totalWorkers = Integer.parseInt(parts[2].trim());
+                System.out.println("Worker assigned ID " + workerId
+                        + " of " + totalWorkers);
             }
-
         } catch (IOException e) {
-            System.err.println("Handshake error: " + e.getMessage());
-            e.printStackTrace();
-            return;
+            System.err.println("Warning: cannot reach Master, running standalone: "
+                    + e.getMessage());
+            workerId = 0;
+            totalWorkers = 1;
         }
 
-        // 3) Load our partition
+        // 3) load and partition stores
         loadStores();
         System.out.println("Worker " + workerId
-                + " loaded stores; now listening on port " + commandPort);
+                + " ready; listening on port " + commandPort);
 
-        // 4) Allow manual SHUTDOWN via console
+        // 4) console shutdown thread (unchanged)
         checkKeyboardInputForShutdown();
 
-        // 5) Main accept-loop for commands
+        // 5) accept-loop
         while (true) {
             try (Socket s = server.accept();
-                 BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                 BufferedReader in = new BufferedReader(
+                         new InputStreamReader(s.getInputStream()));
                  PrintWriter out = new PrintWriter(s.getOutputStream(), true)) {
-
                 String command = in.readLine();
                 String data    = in.readLine();
                 String jobId   = in.readLine();
+                if (command == null) continue;
 
-                // NEW: debug logging for *every* incoming command
-                System.out.printf(
-                        "Worker %d ← COMMAND=%s, DATA=%s, JOBID=%s%n",
-                        workerId, command, data, jobId
-                );
-                if (command == null || data == null || jobId == null) {
-                    System.out.println("Master closed connection.");
+                System.out.printf("Worker %d received %s / %s / %s%n",
+                        workerId, command, data, jobId);
+
+                if ("RELOAD".equalsIgnoreCase(command)) {
+                    totalWorkers = Integer.parseInt(data.trim());
+                    loadStores();
+                    out.println("RELOAD_RESPONSE: reloaded");
+                    continue;
+                }
+                if ("DECREMENT_ID".equalsIgnoreCase(command)) {
+                    String[] p = data.split(":");
+                    workerId = Integer.parseInt(p[0]);
+                    totalWorkers = Integer.parseInt(p[1]);
                     continue;
                 }
 
-                // --- RELOAD ---
-                if ("RELOAD".equalsIgnoreCase(command.trim())) {
-                    try {
-                        totalWorkers = Integer.parseInt(data.trim());
-                        loadStores();
-                        out.println("RELOAD_RESPONSE:Worker " + workerId
-                                + " reloaded " + storeManager.getAllStores().size() + " stores.");
-                    } catch (Exception ex) {
-                        out.println("RELOAD_RESPONSE:Error reloading stores: " + ex.getMessage());
-                    }
-                    continue;
-                }
-
-                // --- DECREMENT_ID ---
-                if ("DECREMENT_ID".equalsIgnoreCase(command.trim())) {
-                    String[] parts = data.split(":");
-                    workerId     = Integer.parseInt(parts[0].trim());
-                    totalWorkers = Integer.parseInt(parts[1].trim());
-                    System.out.println("Worker changed id to: " + workerId);
-                    continue;
-                }
-
-                // --- Replica fallback (from broadcastToReplicas) ---
+                String response;
                 if (command.contains("|")) {
-                    String[] parts = command.split("\\|", 3);
-                    if (parts.length == 3) {
-                        String cmd      = parts[0];
-                        String cmdData  = parts[1];
-                        String cmdJobId = parts[2];
-                        String response = processCommand(cmd, cmdData, cmdJobId);
-                        if (!cmd.contains("REPLAY")) {
-                            out.println("CMD_RESPONSE:" + response);
-                        }
-                    }
-                    continue;
+                    String[] parts = command.split("\\|",3);
+                    response = processCommand(parts[0], parts[1], parts[2]);
+                } else {
+                    response = processCommand(command, data, jobId);
                 }
+                out.println("CMD_RESPONSE:" + response);
 
-                // --- Normal command ---
-                String response = processCommand(command, data, jobId);
-                if (!command.contains("REPLAY")) {
-                    out.println("CMD_RESPONSE:" + response);
-                }
-
-            } catch (IOException ioe) {
-                System.err.println("Error handling master connection: " + ioe.getMessage());
+            } catch (IOException ex) {
+                System.err.println("Error handling command: " + ex.getMessage());
             }
         }
     }
 
-
-    /**
-     * Sends a shutdown notification to the Master server
-     * so that this worker can be gracefully deregistered.
-     *
-     * @throws IOException if an I/O error occurs when connecting
-     */
-    private void sendTerminationCommand() throws IOException {
-        try {
-            try (Socket socketTemp = new Socket("192.168.1.51", masterPort);
-                 PrintWriter writerTemp = new PrintWriter(socketTemp.getOutputStream(), true)) { // Auto-flush enabled
-                writerTemp.println("WORKER_SHUTDOWN:" + workerId);
-                totalWorkers--;
-                System.out.println("Shutdown notification sent on new connection.");
-            }
+    private void sendTerminationCommand() {
+        try (Socket sock = new Socket(masterHost, masterPort);
+             PrintWriter w = new PrintWriter(sock.getOutputStream(), true)) {
+            w.println("WORKER_SHUTDOWN:" + workerId);
+            System.out.println("Sent shutdown to Master");
         } catch (IOException e) {
-            System.err.println("Failed to send shutdown notification: " + e.getMessage());
+            System.err.println("Shutdown notify failed: " + e.getMessage());
         }
     }
 
-    /**
-     * Starts a background thread that listens for "SHUTDOWN" on the console input
-     * and exits the process when received.
-     */
     private void checkKeyboardInputForShutdown() {
         new Thread(() -> {
-            BufferedReader terminalReader = new BufferedReader(new InputStreamReader(System.in));
+            BufferedReader term = new BufferedReader(
+                    new InputStreamReader(System.in));
             while (true) {
                 try {
-                    String cmd = terminalReader.readLine();
-                    if ("SHUTDOWN".equalsIgnoreCase(cmd.trim())) {
-                        System.out.println("Manual shutdown command received.");
+                    if ("SHUTDOWN".equalsIgnoreCase(term.readLine().trim())) {
+                        sendTerminationCommand();
                         System.exit(0);
                     }
-                } catch (IOException e) {
-                    System.err.println("Error reading from terminal: " + e.getMessage());
-                }
+                } catch (IOException ignored) {}
             }
         }).start();
     }
-
     /**
      * Main entry point for the Worker application.
      * Registers a shutdown hook to notify Master before exit and starts the worker.
@@ -537,7 +453,7 @@ public class Worker {
             System.out.println("Shutdown hook triggered for Worker");
             try {
                 worker.sendTerminationCommand();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         }));

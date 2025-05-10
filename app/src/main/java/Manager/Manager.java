@@ -328,7 +328,7 @@ public class Manager {
      */
     public static void main(String[] args) {
         // Manager connects to Master on localhost:12345.
-        Manager manager = new Manager("192.168.1.51", 12345);
+        Manager manager = new Manager("192.168.1.50", 12345);
         manager.interactiveMenu();
     }
 }
