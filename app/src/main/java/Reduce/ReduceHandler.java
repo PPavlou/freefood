@@ -23,7 +23,7 @@ public class ReduceHandler implements Runnable {
     private static final Map<String, AggregationJob> jobs = new HashMap<>();
 
     // Master connection info
-    private static final String MASTER_HOST = "192.168.1.50";
+    private static final String MASTER_HOST = "172.20.10.3";
     private static final int MASTER_PORT = 12345;
 
     public ReduceHandler(Socket socket) {

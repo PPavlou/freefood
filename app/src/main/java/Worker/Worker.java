@@ -22,7 +22,7 @@ import Reduce.Reduce;
  * and sends mapping results to the external reduce server when required.
  */
 public class Worker {
-    private final String masterHost = "192.168.1.50";  // Master address, optional
+    private final String masterHost = "172.20.10.3";  // Master address, optional
     private final int masterPort;
     private final int commandPort;
     private StoreManager storeManager;
@@ -252,7 +252,7 @@ public class Worker {
      */
     private String sendToReduceServer(String command, String mappingJson, String jobId) {
         int expectedCount = this.totalWorkers;
-        String reduceHost = "192.168.1.50";
+        String reduceHost = "172.20.10.3";
         int reducePort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceHost, reducePort);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
@@ -337,7 +337,7 @@ public class Worker {
      * listens for commands to process, and handles reload and shutdown events.
      */
     public void start() {
-        // 1) open ServerSocket for incoming commands
+        // 1) Open your command socket so broadcastReload can connect even during handshake
         ServerSocket server;
         try {
             server = new ServerSocket(commandPort);
@@ -345,36 +345,75 @@ public class Worker {
             throw new RuntimeException("Failed to bind on port " + commandPort, e);
         }
 
-        // 2) optional handshake with Master
+        // 2) Handshake + collect dynamic‐replay messages
+        List<Store> replayAdds    = new ArrayList<>();
+        List<String> replayRemoves = new ArrayList<>();
         try (Socket reg = new Socket(masterHost, masterPort);
              PrintWriter out = new PrintWriter(reg.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(
+             BufferedReader in  = new BufferedReader(
                      new InputStreamReader(reg.getInputStream()))) {
+
+            // tell master who we are
             out.println("WORKER_HANDSHAKE");
             out.println(commandPort);
+
+            // first line is the assignment
             String assign = in.readLine();
             if (assign != null && assign.startsWith("WORKER_ASSIGN:")) {
                 String[] parts = assign.split(":");
-                workerId = Integer.parseInt(parts[1].trim());
+                workerId     = Integer.parseInt(parts[1].trim());
                 totalWorkers = Integer.parseInt(parts[2].trim());
-                System.out.println("Worker assigned ID " + workerId
-                        + " of " + totalWorkers);
+                System.out.println("Worker assigned ID " + workerId + " of " + totalWorkers);
+            } else {
+                throw new IllegalStateException("Bad handshake response: " + assign);
+            }
+
+            // now read *all* the replay commands until master closes the socket
+            String line;
+            while ((line = in.readLine()) != null) {
+                switch (line) {
+                    case "ADD_STORE(REPLAY)" -> {
+                        String json  = in.readLine();
+                        in.readLine();           // jobId (we can ignore it here)
+                        Store s = gson.fromJson(json, Store.class);
+                        replayAdds.add(s);
+                    }
+                    case "REMOVE_STORE(REPLAY)" -> {
+                        String name = in.readLine();
+                        in.readLine();           // jobId
+                        replayRemoves.add(name.trim());
+                    }
+                    default -> {
+                        // ignore any other lines
+                    }
+                }
             }
         } catch (IOException e) {
-            System.err.println("Warning: cannot reach Master, running standalone: "
-                    + e.getMessage());
-            workerId = 0;
+            System.err.println("Warning: cannot reach Master for handshake, running standalone: " + e.getMessage());
+            workerId     = 0;
             totalWorkers = 1;
         }
 
-        // 3) load and partition stores
+        // 3) Load your static JSON stores exactly once
+        loadStores();  // this populates `allStores` and partitions into storeManager
+
+        // 4) Apply the replays you collected
+        for (Store s : replayAdds) {
+            s.setAveragePriceOfStore();
+            s.setAveragePriceOfStoreSymbol();
+            allStores.add(s);
+        }
+        for (String name : replayRemoves) {
+            allStores.removeIf(s -> s.getStoreName().equals(name));
+        }
+
+        // 5) Re-partition so storeManager reflects both static + dynamic stores
         loadStores();
-        System.out.println("Worker " + workerId
-                + " ready; listening on port " + commandPort);
 
-        // 4) console shutdown thread (unchanged)
+        System.out.println("Worker " + workerId + " loaded stores (incl. dynamic) and ready; listening on port " + commandPort);
+
+        // 6) Shutdown hook and begin serving commands
         checkKeyboardInputForShutdown();
-
         // 5) accept-loop
         while (true) {
             try (Socket s = server.accept();
@@ -429,15 +468,17 @@ public class Worker {
 
     private void checkKeyboardInputForShutdown() {
         new Thread(() -> {
-            BufferedReader term = new BufferedReader(
-                    new InputStreamReader(System.in));
+            BufferedReader terminalReader = new BufferedReader(new InputStreamReader(System.in));
             while (true) {
                 try {
-                    if ("SHUTDOWN".equalsIgnoreCase(term.readLine().trim())) {
-                        sendTerminationCommand();
+                    String cmd = terminalReader.readLine();
+                    if ("SHUTDOWN".equalsIgnoreCase(cmd.trim())) {
+                        System.out.println("Manual shutdown command received.");
                         System.exit(0);
                     }
-                } catch (IOException ignored) {}
+                } catch (IOException e) {
+                    System.err.println("Error reading from terminal: " + e.getMessage());
+                }
             }
         }).start();
     }
