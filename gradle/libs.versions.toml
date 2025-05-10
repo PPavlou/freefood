@@ -1,5 +1,5 @@
 [versions]
-agp = "8.7.1"
+agp = "8.7.2"
 androidJunit5 = "1.8.2.1"
 androidxJunit = "1.x.x"
 cardview = "1.0.0"

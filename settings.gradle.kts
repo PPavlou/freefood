@@ -20,4 +20,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "freefood"
-include(":app")
+include(":app", ":cli")
