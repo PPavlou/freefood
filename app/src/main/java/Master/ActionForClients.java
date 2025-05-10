@@ -21,7 +21,6 @@ import model.Store;
  */
 public class ActionForClients implements Runnable {
     private Socket clientSocket;
-    private List<Socket> workerSockets;
     private BufferedReader initialReader;
     private String firstLine;
 
@@ -29,16 +28,13 @@ public class ActionForClients implements Runnable {
      * Constructs a handler for a connected client.
      *
      * @param clientSocket   the socket connected to the client
-     * @param workerSockets  the list of sockets for available worker nodes
      * @param firstLine      the first command line received from the client
      * @param initialReader  reader already positioned after reading the first line
      */
     public ActionForClients(Socket clientSocket,
-                            List<Socket> workerSockets,
-                            String firstLine,
+                           String firstLine,
                             BufferedReader initialReader) {
         this.clientSocket  = clientSocket;
-        this.workerSockets = workerSockets;
         this.firstLine     = firstLine;
         this.initialReader = initialReader;
     }
@@ -158,19 +154,18 @@ public class ActionForClients implements Runnable {
                 "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT", "DECREMENT_PRODUCT_AMOUNT",
                 "PURCHASE_PRODUCT", "REVIEW"
         ));
+
         if (directedCommands.contains(command.toUpperCase())) {
-            // Send to the single worker responsible for this store
+            // 1) Extract store name
             String storeName = extractStoreName(command, data);
             if (storeName == null || storeName.isEmpty()) {
                 responses.add("Error: Cannot extract store name for command " + command);
                 return responses;
             }
-            int workerCount;
-            int index;
-            Socket workerSocket;
 
+            // 2) Wait for at least one worker to register
             synchronized (MasterServer.workerAvailable) {
-                while (workerSockets.isEmpty()) {
+                while (MasterServer.workerHostsById.isEmpty()) {
                     try {
                         MasterServer.workerAvailable.wait();
                     } catch (InterruptedException e) {
@@ -179,47 +174,30 @@ public class ActionForClients implements Runnable {
                         return responses;
                     }
                 }
-                workerCount = workerSockets.size();
-                index       = Math.abs(storeName.hashCode()) % workerCount;
-                workerSocket = workerSockets.get(index);
             }
 
-            try {
-                synchronized (workerSocket) {
-                    PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-                    BufferedReader in = new BufferedReader(
-                            new InputStreamReader(workerSocket.getInputStream())
-                    );
-                    out.println(command);
-                    out.println(data);
-                    out.println(jobId);
-                    String line;
-                    while ((line = in.readLine()) != null) {
-                        if (line.startsWith("CMD_RESPONSE:")) {
-                            responses.add(line.substring("CMD_RESPONSE:".length()));
-                            break;
-                        }
-                    }
+            int workerCount = MasterServer.workerHostsById.size();
+            int primary     = Math.abs(storeName.hashCode()) % workerCount;
 
-                    if (workerCount>1 && workerSocket.isClosed()) {
-                        int replicationFactor = 2;
-                        List<Integer> replicaIds = new ArrayList<>();
-                        for (int r = 1; r < replicationFactor; r++) {
-                            replicaIds.add((index + r) % workerCount);
-                        }
-                        // build the payload with job ID
-                        String payload = command + "|" + data + "|" + jobId;
+            // 3) Send to primary
+            String resp = sendToWorker(primary, command, data, jobId);
+            responses.add(resp);
 
-                        MasterServer.broadcastToReplicas(replicaIds, payload);
-                    }
+            // 4) Replication fallback on error
+            if (workerCount > 1 && resp.startsWith("{\"error\"")) {
+                List<Integer> replicaIds = new ArrayList<>();
+                int replicationFactor = 2;
+                for (int r = 1; r < replicationFactor; r++) {
+                    replicaIds.add((primary + r) % workerCount);
                 }
-            } catch (IOException e) {
-                responses.add("Error with worker: " + e.getMessage());
+                String payload = command + "|" + data + "|" + jobId;
+                MasterServer.broadcastToReplicas(replicaIds, payload);
             }
 
         } else {
+            // Broadcast to all workers
             synchronized (MasterServer.workerAvailable) {
-                while (workerSockets.isEmpty()) {
+                while (MasterServer.workerHostsById.isEmpty()) {
                     try {
                         MasterServer.workerAvailable.wait();
                     } catch (InterruptedException e) {
@@ -229,34 +207,39 @@ public class ActionForClients implements Runnable {
                     }
                 }
             }
-            for (Socket workerSocket : workerSockets) {
-                try {
-                    synchronized (workerSocket) {
-                        PrintWriter out = new PrintWriter(workerSocket.getOutputStream(), true);
-                        BufferedReader in = new BufferedReader(
-                                new InputStreamReader(workerSocket.getInputStream())
-                        );
 
-                        out.println(command);
-                        out.println(data);
-                        out.println(jobId);
-
-                        String line;
-                        while ((line = in.readLine()) != null) {
-                            if (line.startsWith("CMD_RESPONSE:")) {
-                                responses.add(line.substring("CMD_RESPONSE:".length()));
-                                break;
-                            }
-                        }
-                    }
-                } catch (IOException e) {
-                    responses.add("Error with worker: " + e.getMessage());
-                }
+            for (Integer workerId : MasterServer.workerHostsById.keySet()) {
+                String r = sendToWorker(workerId, command, data, jobId);
+                responses.add(r);
             }
         }
 
         return responses;
     }
+
+
+
+    private String sendToWorker(int workerId, String cmd, String data, String jobId) {
+        String host = MasterServer.workerHostsById.get(workerId);
+        int    port = MasterServer.workerPortsById.get(workerId);
+        try (Socket s = new Socket(host, port);
+             PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
+            out.println(cmd);
+            out.println(data);
+            out.println(jobId);
+            String line;
+            while ((line = in.readLine()) != null) {
+                if (line.startsWith("CMD_RESPONSE:")) {
+                    return line.substring("CMD_RESPONSE:".length());
+                }
+            }
+        } catch (IOException e) {
+            return "{\"error\":\"Worker comms failed\"}";
+        }
+        return "{\"error\":\"No response\"}";
+    }
+
 
     /**
      * Extracts the target store name from the command and data payload,
