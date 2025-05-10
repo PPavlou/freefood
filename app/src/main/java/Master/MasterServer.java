@@ -124,37 +124,24 @@ public class MasterServer {
 
                     continue;
                 }
-                else if (firstLine != null && (firstLine.contains("WORKER_SHUTDOWN:"))) {
-                    // Expect the format: WORKER_SHUTDOWN:<id>
+                else if (firstLine != null && firstLine.startsWith("WORKER_SHUTDOWN:")) {
+                    // Format: WORKER_SHUTDOWN:<id>
                     String[] parts = firstLine.split(":");
-                    if (parts.length != 2) {
-                        System.err.println("Invalid WORKER_SHUTDOWN message: " + firstLine);
-                        continue;
-                    }
-                    int id = Integer.parseInt(parts[1]);
-
-                    // decrement global worker count
+                    int removedId = Integer.parseInt(parts[1].trim());
+                    // 1) Decrement global worker count
                     synchronized (MasterServer.class) {
                         workerCount--;
                     }
-                    System.out.println("WORKER_SHUTDOWN – ID=" + id + "  CURRENT WORKER COUNT: " + workerCount);
-
+                    System.out.println("WORKER_SHUTDOWN – removed ID=" + removedId +
+                            ", new workerCount=" + workerCount);
+                    // 2) Remove from host/port maps
+                    workerHostsById.remove(removedId);
+                    workerPortsById.remove(removedId);
+                    // 3) Reindex remaining workers and notify them
                     synchronized (workerAvailable) {
-                        // look up the original Socket you stored for this ID
-                        Socket toRemove = workerSocketsById.remove(id);
-                        if (toRemove != null) {
-                            workerSockets.remove(toRemove);
-                            System.out.println("Removed worker " + id + " at " + toRemove.getRemoteSocketAddress());
-                            try {
-                                toRemove.close();
-                            } catch (IOException ex) {
-                                System.err.println("Error closing socket for worker " + id + ": " + ex.getMessage());
-                            }
-                        } else {
-                            System.err.println("No socket found for WORKER_SHUTDOWN ID=" + id);
-                        }
-                        shiftWorkerIdsDown(id);
+                        shiftWorkerIdsDown(removedId);
                         workerAvailable.notifyAll();
+                        // 4) Tell everyone to reload their partitions
                         broadcastReload();
                     }
                 }
@@ -239,26 +226,39 @@ public class MasterServer {
      * @param removedId the ID of the worker that was removed
      */
     private static void shiftWorkerIdsDown(int removedId) {
-        Map<Integer, Socket> updatedAssignments = new HashMap<>();
-
-        for (Integer oldId : new ArrayList<>(workerSocketsById.keySet())) {
-            if (oldId > removedId) {
-                Socket sock = workerSocketsById.remove(oldId);
+        Map<Integer, String> newHosts = new HashMap<>();
+        Map<Integer, Integer> newPorts = new HashMap<>();
+        // 1) Rebuild host/port maps with decremented IDs
+        for (Integer oldId : new ArrayList<>(workerHostsById.keySet())) {
+            String host = workerHostsById.remove(oldId);
+            int port    = workerPortsById.remove(oldId);
+            if (oldId < removedId) {
+                newHosts.put(oldId, host);
+                newPorts.put(oldId, port);
+            } else if (oldId > removedId) {
                 int newId = oldId - 1;
-                updatedAssignments.put(newId, sock);
-                try {
-                    PrintWriter out = new PrintWriter(sock.getOutputStream(), true);
-                    String jobId=ActionForClients.generateJobId();
-
-                    out.println("DECREMENT_ID");
-                    out.println(newId + ":" + workerCount);
-                    out.println(jobId);
-                    System.out.println("DECREASE ID FOR WORKER: " + oldId);
-                } catch (IOException ex) {
-                    System.err.println("Failed to notify worker " + oldId + " of new ID: " + ex.getMessage());
-                }
+                newHosts.put(newId, host);
+                newPorts.put(newId, port);
+            }
+            // skip oldId == removedId
+        }
+        workerHostsById.putAll(newHosts);
+        workerPortsById.putAll(newPorts);
+        // 2) Notify each remaining worker of its new ID and total count
+        for (Map.Entry<Integer, String> e : newHosts.entrySet()) {
+            int id   = e.getKey();
+            String host = e.getValue();
+            int    port = newPorts.get(id);
+            try (Socket ws = new Socket(host, port);
+                 PrintWriter out = new PrintWriter(ws.getOutputStream(), true)) {
+                String jobId = ActionForClients.generateJobId();
+                out.println("DECREMENT_ID");
+                out.println(id + ":" + workerHostsById.size());
+                out.println(jobId);
+                System.out.println("Notified worker " + id + " of new ID");
+            } catch (IOException ex) {
+                System.err.println("Failed to notify worker " + id + ": " + ex.getMessage());
             }
         }
-        workerSocketsById.putAll(updatedAssignments);
     }
 }
