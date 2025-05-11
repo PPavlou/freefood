@@ -67,6 +67,9 @@ public class MasterServer {
                     String host = sock.getInetAddress().getHostAddress();
                     workerHostsById.put(id, host);
                     workerPortsById.put(id, wp);
+                    synchronized (workerAvailable){
+                        workerAvailable.notifyAll();
+                    }
                     sock.close();
                     broadcastReload();
                     System.out.printf("Worker %d @ %s:%d registered%n", id, host, wp);

@@ -1,19 +1,16 @@
 plugins {
+    alias(libs.plugins.android.application) apply false
     id("java")
 }
 
 group = "org.example"
 version = "unspecified"
 
-repositories {
-    mavenCentral()
-    google()
-}
-
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation(libs.org.jacoco.core)
+    implementation(libs.google.services)
     implementation(libs.gson)
+    testImplementation(libs.android.junit5)
 }
 
 tasks.test {
