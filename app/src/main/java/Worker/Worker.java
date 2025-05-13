@@ -22,7 +22,7 @@ import Reduce.Reduce;
  * and sends mapping results to the external reduce server when required.
  */
 public class Worker {
-    private final String masterHost = "172.20.10.3";  // Master address, optional
+    private final String masterHost = "localhost";  // Master address, optional
     private final int masterPort;
     private final int commandPort;
     private StoreManager storeManager;
@@ -252,7 +252,7 @@ public class Worker {
      */
     private String sendToReduceServer(String command, String mappingJson, String jobId) {
         int expectedCount = this.totalWorkers;
-        String reduceHost = "172.20.10.3";
+        String reduceHost = "localhost";
         int reducePort = Reduce.REDUCE_PORT;
         try (Socket socket = new Socket(reduceHost, reducePort);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
