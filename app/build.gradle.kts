@@ -1,18 +1,14 @@
 plugins {
     id("com.android.application")
-    id("jacoco")
 }
 
-group = "org.example"
-version = "unspecified"
-
 android {
-    namespace = "com.freefood.app"
+    namespace = "com.example.freefood"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.freefood.app"
-        minSdk = 24
+        applicationId = "com.example.freefood"
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -30,50 +26,24 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    buildFeatures {
-        viewBinding = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
-    // AndroidX and Material Libraries
-    implementation(libs.appcompat)
-    implementation(libs.material)
-    implementation(libs.activity)
-    implementation(libs.constraintlayout)
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.9.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    // UI Components
-    implementation(libs.cardview)
-    implementation(libs.navigation.fragment)
-    implementation(libs.navigation.ui)
-    implementation(libs.lifecycle.viewmodel.android)
+    // Gson for JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
 
-    // Unit Testing Dependencies
-    testImplementation(libs.junit.jupiter.api)
-    testImplementation(libs.junit.jupiter)
-    testImplementation(libs.core)
-    testImplementation(libs.mockito.core)
-    testImplementation(libs.mockito.inline)
-    androidTestImplementation(libs.junit.jupiter) // JUnit 5 API for tests
-    testRuntimeOnly(libs.junit.jupiter.engine) // JUnit 5 engine for running tests
-    testImplementation(libs.junit.vintage.engine) // Optional, allows running JUnit 4 tests on JUnit 5 platform
+    // Google Play Services Location
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 
-    // Android Instrumentation Testing Dependencies
-    androidTestImplementation(libs.ext.junit) // Android-specific JUnit 4
-    androidTestImplementation(libs.espresso.core)
-    androidTestImplementation(libs.archCoreTesting)
-    implementation(libs.threetenabp)// Espresso for UI testing
-    implementation(libs.room.runtime)
-    annotationProcessor(libs.room.compiler)
-    implementation(libs.gson)
-    implementation(libs.glide)
-    annotationProcessor (libs.compiler)
-
-}
-java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    // Testing dependencies
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

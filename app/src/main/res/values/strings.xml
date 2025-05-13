@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">MyApplication</string>
+    <string-array name="search_options">
+        <item>Food Category</item>
+        <item>Star Rating</item>
+        <item>Average Price</item>
+        <item>Radius Search</item>
+    </string-array>
+</resources>
