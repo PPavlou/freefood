@@ -39,6 +39,9 @@ dependencies {
     // Gson for JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
 
+    // Glide
+    implementation("com.github.bumptech.glide:glide:4.15.1")
+
     // Google Play Services Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
 

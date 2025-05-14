@@ -1,5 +1,8 @@
 package com.example.freefood.Main;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,9 +13,11 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.freefood.Model.Store;
 import com.example.freefood.R;
+
 import java.util.List;
 
 public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.Holder> {
+    private static final String TAG = "StoreAdapter";
     private final List<Store> stores;
     private final OnItemClickListener clickListener;
 
@@ -40,18 +45,27 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.Holder> {
         h.tagline.setText(s.getTagline());
         h.rating.setText(s.getStarRatingString());
         h.distance.setText(" • " + s.getDistanceKm() + " km");
-        // TODO: load real image URL if you have one:
-        // Glide.with(h.imgStore.getContext())
-        //      .load(s.getImageUrl())
-        //      .placeholder(R.drawable.ic_store_placeholder)
-        //      .into(h.imgStore);
+
+        if (s.getStoreLogo() != null && !s.getStoreLogo().isEmpty()) {
+            try {
+                byte[] bytes = Base64.decode(s.getStoreLogo(), Base64.DEFAULT);
+                Bitmap bmp  = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                h.imgStore.setImageBitmap(bmp);
+            } catch (IllegalArgumentException iae) {
+                // bad base-64 ⇒ fall-back
+                h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
+            }
+        } else {
+            h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
+        }
 
         h.itemView.setOnClickListener(v -> clickListener.onStoreClick(s));
     }
 
+
+
     @Override public int getItemCount() { return stores.size(); }
 
-    /** in StoreAdapter class **/
     public void updateStores(List<Store> newStores) {
         this.stores.clear();
         this.stores.addAll(newStores);
@@ -63,11 +77,11 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.Holder> {
         public final TextView name, tagline, rating, distance;
         public Holder(@NonNull View itemView) {
             super(itemView);
-            imgStore = itemView.findViewById(R.id.imgStore);
-            name     = itemView.findViewById(R.id.tvStoreName);
-            tagline  = itemView.findViewById(R.id.tvStoreTagline);
-            rating   = itemView.findViewById(R.id.tvRating);
-            distance = itemView.findViewById(R.id.tvDistance);
+            imgStore  = itemView.findViewById(R.id.imgStore);
+            name      = itemView.findViewById(R.id.tvStoreName);
+            tagline   = itemView.findViewById(R.id.tvStoreTagline);
+            rating    = itemView.findViewById(R.id.tvRating);
+            distance  = itemView.findViewById(R.id.tvDistance);
         }
     }
 }

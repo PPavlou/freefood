@@ -116,6 +116,18 @@ public class MainMenuViewModel extends ViewModel {
                     full.setDistanceKm(Math.round(km * 10) / 10.0);
 
                     interim.set(i, full);
+
+                    // ─── 5) fetch logo ───
+                    String b64resp = nt.sendCommand("GET_LOGO", full.getStoreName());
+                    if (b64resp != null && b64resp.trim().startsWith("[")) {
+                        try {
+                            List<String> arr = gson.fromJson(b64resp, listOfString);
+                            if (!arr.isEmpty()) {
+                                full.setStoreLogo(arr.get(0));
+                            }
+                        } catch (Exception ignored) { }
+                    }
+                    interim.set(i, full);
                 } catch (Exception ex) {
                     Log.w("MainMenuVM", "Failed to parse STORE_DETAILS JSON for "
                             + stub.getStoreName(), ex);
