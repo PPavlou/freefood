@@ -36,8 +36,8 @@
 
         <!-- Main application screen (post-login) -->
         <activity
-            android:name="com.example.freefood.Main.MainActivity"
-            android:exported="false" />
+            android:name="com.example.freefood.Main.MainMenuActivity"
+            android:exported="true" />
 
     </application>
 

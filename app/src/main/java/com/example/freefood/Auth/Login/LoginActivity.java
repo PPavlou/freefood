@@ -12,7 +12,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.freefood.R;
 import com.example.freefood.Auth.Register.RegisterActivity;
-import com.example.freefood.Main.MainActivity;
+import com.example.freefood.Main.MainMenuActivity;
 
 public class LoginActivity extends ComponentActivity {
     private LoginViewModel vm;
@@ -35,7 +35,7 @@ public class LoginActivity extends ComponentActivity {
 
         vm.getLoginSuccess().observe(this, success -> {
             if (success) {
-                startActivity(new Intent(this, MainActivity.class));
+                startActivity(new Intent(this, MainMenuActivity.class));
                 finish();
             }
         });
