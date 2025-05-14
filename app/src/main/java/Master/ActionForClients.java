@@ -3,6 +3,7 @@ package Master;
 import java.io.*;
 import java.net.Socket;
 import java.util.*;
+
 import com.google.gson.Gson;
 import model.Store;
 
@@ -30,6 +31,32 @@ public class ActionForClients implements Runnable {
 
             String cmd  = firstLine;
             String data = in.readLine();
+
+            // Authentication check (skip for register/login)
+            Set<String> managerCmds = Set.of(
+                    "ADD_PRODUCT", "REMOVE_PRODUCT",
+                    "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT",
+                    "DECREMENT_PRODUCT_AMOUNT", "PURCHASE_PRODUCT",
+                    "REVIEW", "ADD_STORE", "REMOVE_STORE"
+            );
+            if (!cmd.equalsIgnoreCase("REGISTER")
+                    && !cmd.equalsIgnoreCase("LOGIN")
+                    && !managerCmds.contains(cmd.toUpperCase())) {
+                // Everything else must carry a session token
+                String[] parts = data.split("\\|", 2);
+                if (parts.length < 2) {
+                    out.println("{\"error\":\"Missing session token.\"}");
+                    return;
+                }
+                String token   = parts[0];
+                String payload = parts[1];
+                if (!MasterServer.userSessions.containsKey(token)) {
+                    out.println("{\"error\":\"Invalid or expired session token.\"}");
+                    return;
+                }
+                data = payload;  // strip off token for downstream processing
+            }
+
             String jobId = generateJobId();
 
             List<String> responses = forwardToWorkers(cmd, data, jobId);
@@ -71,7 +98,8 @@ public class ActionForClients implements Runnable {
                     Store s = gson.fromJson(data, Store.class);
                     MasterServer.dynamicStores.add(s);
                 } else {
-                    MasterServer.dynamicStores.removeIf(s -> s.getStoreName().equals(data.trim()));
+                    String finalData = data;
+                    MasterServer.dynamicStores.removeIf(s -> s.getStoreName().equals(finalData.trim()));
                     MasterServer.dynamicRemoves.add(data.trim());
                 }
                 MasterServer.broadcastReload();

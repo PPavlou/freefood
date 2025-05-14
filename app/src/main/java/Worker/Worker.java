@@ -441,6 +441,23 @@ public class Worker {
                     continue;
                 }
 
+                if ("STORE_DETAILS".equalsIgnoreCase(command)) {
+                    String storeName = data.trim();
+                    // Look up in this worker’s local storeManager
+                    Store found = storeManager.getStore(storeName);
+
+                    String payload;
+                    if (found != null) {
+                        payload = gson.toJson(found);
+                    } else {
+                        payload = "{\"error\":\"Store not found: " + storeName + "\"}";
+                    }
+                    // Prefix exactly as other commands
+                    out.println("CMD_RESPONSE:" + payload);
+                    // skip the rest of processing
+                    continue;
+                }
+
                 String response;
                 if (command.contains("|")) {
                     String[] parts = command.split("\\|",3);

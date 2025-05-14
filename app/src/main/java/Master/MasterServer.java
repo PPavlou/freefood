@@ -2,6 +2,7 @@
 package Master;
 
 import java.io.*;
+import java.lang.reflect.Type;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
@@ -11,6 +12,44 @@ import model.Store;
 
 public class MasterServer {
     private static final int MASTER_PORT = 12345;
+
+    // Store user sessions for login and register
+    public static final Map<String,String> userCredentials =
+            Collections.synchronizedMap(new HashMap<>());
+    public static final Map<String,String> userSessions =
+            Collections.synchronizedMap(new HashMap<>());
+
+    // Persist users
+    private static final File CRED_STORE = new File("app/src/main/resources/users.json");
+
+    static {
+        // Load any previously saved credentials, or seed with a default user
+        if (CRED_STORE.exists()) {
+            try (Reader r = new FileReader(CRED_STORE)) {
+                Type t = new com.google.gson.reflect.TypeToken<Map<String,String>>(){}.getType();
+                Map<String,String> loaded = new Gson().fromJson(r, t);
+                if (loaded != null) {
+                    userCredentials.putAll(loaded);
+                }
+            } catch (IOException e) {
+                System.err.println("Failed to load users.json: " + e.getMessage());
+            }
+        }
+        // Ensure there's always at least one default account
+        userCredentials.putIfAbsent("default", "default|asd");
+
+        // Save back immediately in case defaultUser was just added
+        saveCredentials();
+    }
+
+    private static synchronized void saveCredentials() {
+        try (Writer w = new FileWriter(CRED_STORE)) {
+            Gson gson = new Gson();
+            gson.toJson(userCredentials, w);
+        } catch (IOException e) {
+            System.err.println("Failed to save users.json: " + e.getMessage());
+        }
+    }
 
     // store only host+port per worker
     public static final Map<Integer,String> workerHostsById =
@@ -39,6 +78,36 @@ public class MasterServer {
                 sock.setSoTimeout(1000);
 
                 String line = in.readLine();
+                if ("REGISTER".equalsIgnoreCase(line)) {
+                    String data = in.readLine();
+                    String[] parts = data.split("\\|", 2);
+                    String user = parts[0], pass = parts[1];
+                    if (userCredentials.containsKey(user)) {
+                        out.println("ERROR:USER_EXISTS");
+                    } else {
+                        userCredentials.put(user, pass);
+                        saveCredentials();
+                        out.println("REGISTER_SUCCESS");
+                    }
+                    sock.close();
+                    continue;
+                }
+                // --- handle LOGIN ---
+                if ("LOGIN".equalsIgnoreCase(line)) {
+                    String data = in.readLine();               // "username|password"
+                    String[] parts = data.split("\\|", 2);
+                    String user = parts[0], pass = parts[1];
+                    if (!userCredentials.containsKey(user) ||
+                            !userCredentials.get(user).equals(pass)) {
+                        out.println("ERROR:INVALID_CREDENTIALS");
+                    } else {
+                        String token = UUID.randomUUID().toString();
+                        userSessions.put(token, user);
+                        out.println("LOGIN_SUCCESS|" + token);
+                    }
+                    sock.close();
+                    continue;
+                }
                 if ("WORKER_HANDSHAKE".equals(line)) {
                     int wp = Integer.parseInt(in.readLine().trim());
                     int id;
