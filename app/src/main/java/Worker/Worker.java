@@ -162,7 +162,35 @@ public class Worker {
                 intermediate.addAll(mapper.map(pair.getKey(), pair.getValue()));
             }
             return gson.toJson(intermediate);
-        } else {
+        } else if ("GET_LOGO".equalsIgnoreCase(command)) {
+            // data == storeName
+            String storeName = data.trim();
+            String resourcePath = "app/src/main/resources/Logos/" + storeName + ".jpg";
+            try (InputStream is = Worker.class.getResourceAsStream(resourcePath)) {
+                if (is == null) {
+                    // no such file
+                    return gson.toJson(Collections.singletonList(
+                            "{\"error\":\"Logo not found\"}"
+                    ));
+                }
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int r;
+                while ((r = is.read(buffer)) != -1) {
+                    baos.write(buffer, 0, r);
+                }
+                String b64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                // wrap as single‐element JSON array (to match your existing unwrap logic)
+                return gson.toJson(Collections.singletonList(b64));
+            } catch (IOException e) {
+                return gson.toJson(Collections.singletonList(
+                        Base64.getEncoder().encodeToString(
+                                ("ERROR reading logo: " + e.getMessage()).getBytes()
+                        )
+                ));
+            }
+        }
+        else {
             // Manager commands.
             if (command.contains("ADD_STORE")) {
                 Store store = gson.fromJson(data, Store.class);
@@ -443,18 +471,31 @@ public class Worker {
 
                 if ("STORE_DETAILS".equalsIgnoreCase(command)) {
                     String storeName = data.trim();
-                    // Look up in this worker’s local storeManager
                     Store found = storeManager.getStore(storeName);
 
                     String payload;
                     if (found != null) {
+                        // NEW: embed the actual bytes
+                        try {
+                            if (found.getStoreLogo() != null && !found.getStoreLogo().isEmpty()) {
+                                // The path in JSON is relative to the JAR resources
+                                InputStream is = Worker.class.getResourceAsStream(
+                                        "/" + found.getStoreLogo().replace('\\','/'));
+                                if (is != null) {
+                                    byte[] bytes = is.readAllBytes();
+                                    String b64 = Base64.getEncoder().encodeToString(bytes);
+                                    found.setStoreLogo(b64);   // add setter or public field
+                                }
+                            }
+                        } catch (IOException ioe) {
+                            System.err.println("Logo read failed for " + storeName + ": " + ioe);
+                        }
                         payload = gson.toJson(found);
                     } else {
                         payload = "{\"error\":\"Store not found: " + storeName + "\"}";
                     }
-                    // Prefix exactly as other commands
+
                     out.println("CMD_RESPONSE:" + payload);
-                    // skip the rest of processing
                     continue;
                 }
 

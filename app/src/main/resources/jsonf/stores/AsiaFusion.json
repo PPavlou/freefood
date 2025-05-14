@@ -5,7 +5,7 @@
   "FoodCategory": "asian",
   "Stars": 4,
   "NoOfVotes": 33,
-  "StoreLogo": "https://drive.usercontent.google.com/download?id=1F7_B6vHwb5GgUNQwsjSbpBiG7lI_IxKL&export=view&authuser=0",
+  "LogoBase64": "app/src/main/resources/Logos/AsiaFusion.jpg",
   "Products": [
     {
       "ProductName": "Spring Rolls",
