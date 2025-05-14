@@ -1,5 +1,6 @@
 package com.example.freefood.Main;
 
+import android.location.Location;
 import android.util.Log;
 
 import androidx.lifecycle.LiveData;
@@ -26,12 +27,16 @@ public class MainMenuViewModel extends ViewModel {
     }
 
     /**
-     * 1) Get the CSV of names via LIST_STORES
-     * 2) Split into names[], build minimal Store(name)
-     * 3) For each name, call STORE_DETAILS and overwrite that Store with full JSON
-     * 4) Post the final List<Store>
+     * 1) LIST_STORES → get CSV of names
+     * 2) build minimal Store stubs
+     * 3) for each name call STORE_DETAILS → parse full Store
+     * 4) compute distanceKm using userLat/userLon
+     * 5) publish final list
+     *
+     * @param userLat  current user latitude
+     * @param userLon  current user longitude
      */
-    public void loadStores() {
+    public void loadStores(double userLat, double userLon) {
         new Thread(() -> {
             NetworkTask nt = new NetworkTask(
                     MainActivityTEMP.SERVER_HOST,
@@ -98,6 +103,18 @@ public class MainMenuViewModel extends ViewModel {
                 try {
                     Store full = gson.fromJson(jsonObjString, Store.class);
                     full.setStoreName(stub.getStoreName());
+
+                    // ─── 4) compute distanceKm ───
+                    float[] results = new float[1];
+                    Location.distanceBetween(
+                            userLat, userLon,
+                            full.getLatitude(), full.getLongitude(),
+                            results
+                    );
+                    double km = results[0] / 1000.0;
+                    // round to one decimal
+                    full.setDistanceKm(Math.round(km * 10) / 10.0);
+
                     interim.set(i, full);
                 } catch (Exception ex) {
                     Log.w("MainMenuVM", "Failed to parse STORE_DETAILS JSON for "
@@ -105,7 +122,7 @@ public class MainMenuViewModel extends ViewModel {
                 }
             }
 
-            // 4) publish
+            // 5) publish
             stores.postValue(interim);
         }).start();
     }
