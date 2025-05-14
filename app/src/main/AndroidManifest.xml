@@ -32,7 +32,7 @@
         <!-- Registration screen -->
         <activity
             android:name="com.example.freefood.Auth.Register.RegisterActivity"
-            android:exported="false" />
+            android:exported="true" />
 
         <!-- Main application screen (post-login) -->
         <activity

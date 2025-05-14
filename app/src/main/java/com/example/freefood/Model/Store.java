@@ -254,6 +254,37 @@ public class Store {
     }
 
     /**
+     * Returns a tagline composed of food category and average price symbol.
+     */
+    public String getTagline() {
+        String category = (foodCategory != null && !foodCategory.isEmpty())
+                ? foodCategory
+                : "General";
+        String priceSym = (averagePriceSymbol != null)
+                ? averagePriceSymbol
+                : "";
+        return category + " • " + priceSym;
+    }
+
+    /**
+     * Returns a 5-character star rating string, e.g. "★★★☆☆".
+     */
+    public String getStarRatingString() {
+        int fullStars = Math.max(0, Math.min(5, stars));
+        StringBuilder sb = new StringBuilder(5);
+        for (int i = 0; i < fullStars; i++) sb.append('★');
+        for (int i = fullStars; i < 5; i++) sb.append('☆');
+        return sb.toString();
+    }
+
+    /**
+     * Placeholder distance. Replace with real calculation if you pass user coords.
+     */
+    public String getDistanceKm() {
+        return "n/a";
+    }
+
+    /**
      * Calculates and sets the symbol for the store's average price.
      * Uses "$", "$$", or "$$$" based on thresholds.
      */
