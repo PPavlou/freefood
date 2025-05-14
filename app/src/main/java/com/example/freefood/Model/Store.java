@@ -23,6 +23,9 @@ public class Store {
     @SerializedName("Longitude")
     private double longitude;
 
+    @SerializedName("distanceKm")
+    private double distanceKm;
+
     /** The category of food served by the store. */
     @SerializedName("FoodCategory")
     private String foodCategory;
@@ -280,8 +283,12 @@ public class Store {
     /**
      * Placeholder distance. Replace with real calculation if you pass user coords.
      */
-    public String getDistanceKm() {
-        return "n/a";
+    public double getDistanceKm() {
+        return distanceKm;
+    }
+
+    public void setDistanceKm(double distanceKm) {
+        this.distanceKm = distanceKm;
     }
 
     /**
