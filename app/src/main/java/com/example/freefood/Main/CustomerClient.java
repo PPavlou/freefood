@@ -1,4 +1,4 @@
-package com.example.freefood;
+package com.example.freefood.Main;
 
 import java.io.BufferedReader;
 import java.io.IOException;
