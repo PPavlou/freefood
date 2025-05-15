@@ -43,6 +43,11 @@
         <activity
             android:name="com.example.freefood.StoreDetail.StoreDetailActivity"
             android:exported="true" />
+
+        <!-- Product detail screen -->
+        <activity
+            android:name="com.example.freefood.PurchaseProduct.PurchaseActivity"
+            android:exported="true" />
     </application>
 
 </manifest>

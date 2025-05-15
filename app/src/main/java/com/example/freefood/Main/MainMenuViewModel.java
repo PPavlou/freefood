@@ -102,7 +102,7 @@ public class MainMenuViewModel extends ViewModel {
                 // now parse that single JSON object
                 try {
                     Store full = gson.fromJson(jsonObjString, Store.class);
-                    full.setStoreName(stub.getStoreName());
+                    //full.setStoreName(stub.getStoreName());
 
                     // ─── 4) compute distanceKm ───
                     float[] results = new float[1];

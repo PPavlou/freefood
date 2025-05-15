@@ -45,7 +45,14 @@ public class NetworkTask extends AsyncTask<String, Void, String> {
      * Can be called from background threads.
      */
     public String sendCommand(String command, String data) {
-        String payload = (sessionToken != null)
+
+    /*  ---- TOKEN GUARD ----
+        Do NOT prepend the session-token for commands that don’t expect it.
+     */
+        boolean needsToken = sessionToken != null
+                && !command.equals("PURCHASE_PRODUCT");
+
+        String payload = needsToken
                 ? sessionToken + "|" + data
                 : data;
 
@@ -64,6 +71,7 @@ public class NetworkTask extends AsyncTask<String, Void, String> {
             return null;
         }
     }
+
 
     /** AsyncTask plumbing (unchanged) **/
     @Override

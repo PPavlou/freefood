@@ -1,5 +1,6 @@
 package com.example.freefood.StoreDetail;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
@@ -14,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.freefood.Model.Product;
 import com.example.freefood.Model.Store;
+import com.example.freefood.PurchaseProduct.PurchaseActivity;
 import com.example.freefood.R;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.gson.Gson;
@@ -56,10 +58,13 @@ public class StoreDetailActivity extends AppCompatActivity implements StoreDetai
         /* ─── RecyclerView ─── */
         RecyclerView rv = findViewById(R.id.rvProducts);
         rv.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new ProductAdapter(new ArrayList<>(), p -> {
-            /* TODO: start PurchaseActivity */
-            Toast.makeText(this, "Clicked " + p.getProductName(), Toast.LENGTH_SHORT).show();
+        adapter = new ProductAdapter(new ArrayList<>(), product -> {
+            Intent i = new Intent(this, PurchaseActivity.class);
+            i.putExtra("STORE_NAME", store.getStoreName());
+            i.putExtra("PRODUCT_JSON", new Gson().toJson(product));
+            startActivity(i);
         });
+
         rv.setAdapter(adapter);
 
         /* ─── MVP hookup ─── */
