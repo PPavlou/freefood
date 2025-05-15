@@ -50,7 +50,8 @@ public class NetworkTask extends AsyncTask<String, Void, String> {
         Do NOT prepend the session-token for commands that don’t expect it.
      */
         boolean needsToken = sessionToken != null
-                && !command.equals("PURCHASE_PRODUCT");
+                && !command.equals("PURCHASE_PRODUCT")
+                && !command.equals("REVIEW");
 
         String payload = needsToken
                 ? sessionToken + "|" + data

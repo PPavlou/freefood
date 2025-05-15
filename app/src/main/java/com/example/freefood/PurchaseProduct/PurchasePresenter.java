@@ -6,6 +6,7 @@ public class PurchasePresenter {
     public interface PurchaseView {
         void showMessage(String msg);
         void clearQuantityField();
+        void onPurchaseSuccess();
     }
 
     private final PurchaseViewModel vm;
@@ -31,8 +32,9 @@ public class PurchasePresenter {
 
         vm.purchase(store, product, qty, result -> {
             view.showMessage(result);
-            if (result.contains("Successfully")) {
+            if (result != null && result.toLowerCase().contains("success")) {
                 view.clearQuantityField();
+                view.onPurchaseSuccess();
             }
         });
     }
