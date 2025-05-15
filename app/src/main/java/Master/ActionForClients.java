@@ -32,13 +32,16 @@ public class ActionForClients implements Runnable {
             String cmd  = firstLine;
             String data = in.readLine();
 
-            // Authentication check (skip for register/login)
-            Set<String> managerCmds = Set.of(
+            // Authentication check (skip for register/login and all manager commands)
+            final Set<String> managerCmds = new HashSet<>(Arrays.asList(
                     "ADD_PRODUCT", "REMOVE_PRODUCT",
                     "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT",
                     "DECREMENT_PRODUCT_AMOUNT", "PURCHASE_PRODUCT",
-                    "REVIEW", "ADD_STORE", "REMOVE_STORE"
-            );
+                    "REVIEW", "ADD_STORE", "REMOVE_STORE",
+                    // also exempt these reduce/list commands
+                    "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
+                    "LIST_STORES", "DELETED_PRODUCTS"
+            ));
             if (!cmd.equalsIgnoreCase("REGISTER")
                     && !cmd.equalsIgnoreCase("LOGIN")
                     && !managerCmds.contains(cmd.toUpperCase())) {

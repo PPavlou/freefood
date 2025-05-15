@@ -26,7 +26,7 @@ public class Worker {
     private final int masterPort;
     private final int commandPort;
     private StoreManager storeManager;
-    private ProductManager productManager;
+    private ProductManager productManager = new ProductManager();
     private final List<Store> allStores = new ArrayList<>();
     private int workerId = 0;    // defaults for standalone
     private int totalWorkers = 1;
