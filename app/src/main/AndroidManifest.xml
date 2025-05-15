@@ -39,6 +39,10 @@
             android:name="com.example.freefood.Main.MainMenuActivity"
             android:exported="true" />
 
+        <!-- Store detail screen -->
+        <activity
+            android:name="com.example.freefood.StoreDetail.StoreDetailActivity"
+            android:exported="true" />
     </application>
 
 </manifest>

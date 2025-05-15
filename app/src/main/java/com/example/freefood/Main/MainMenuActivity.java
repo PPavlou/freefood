@@ -14,6 +14,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.freefood.Auth.Login.LoginActivity;
 import com.example.freefood.Model.Store;
 import com.example.freefood.R;
+import com.example.freefood.StoreDetail.StoreDetailActivity;
+import com.google.gson.Gson;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +59,9 @@ public class MainMenuActivity extends AppCompatActivity {
 
         rvStores.setLayoutManager(new LinearLayoutManager(this));
         adapter = new StoreAdapter(new ArrayList<>(), store -> {
-            // TODO: open store detail
+            Intent i = new Intent(this, StoreDetailActivity.class);
+            i.putExtra("STORE_JSON", new Gson().toJson(store));
+            startActivity(i);
         });
         rvStores.setAdapter(adapter);
 

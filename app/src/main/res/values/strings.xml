@@ -6,4 +6,7 @@
         <item>Average Price</item>
         <item>Radius Search</item>
     </string-array>
+    <!-- ─── Store-detail / product card ─── -->
+    <string name="product_image">Product image</string>
+    <string name="product_view_button">View</string>
 </resources>
