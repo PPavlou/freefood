@@ -5,7 +5,7 @@
   "FoodCategory": "pizzeria",
   "Stars": 4,
   "NoOfVotes": 22,
-  "StoreLogo": "app/src/main/resources/Logos/PizzaWorld.jpg",
+  "StoreLogo": "https://i.postimg.cc/BQrYnJDJ/Pizza-World.jpg",
   "Products": [
     {
       "ProductName": "Pepperoni",

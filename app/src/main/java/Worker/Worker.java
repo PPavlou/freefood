@@ -165,30 +165,8 @@ public class Worker {
         } else if ("GET_LOGO".equalsIgnoreCase(command)) {
             // data == storeName
             String storeName = data.trim();
-            String resourcePath = "app/src/main/resources/Logos/" + storeName + ".jpg";
-            try (InputStream is = Worker.class.getResourceAsStream(resourcePath)) {
-                if (is == null) {
-                    // no such file
-                    return gson.toJson(Collections.singletonList(
-                            "{\"error\":\"Logo not found\"}"
-                    ));
-                }
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int r;
-                while ((r = is.read(buffer)) != -1) {
-                    baos.write(buffer, 0, r);
-                }
-                String b64 = Base64.getEncoder().encodeToString(baos.toByteArray());
-                // wrap as single‐element JSON array (to match your existing unwrap logic)
-                return gson.toJson(Collections.singletonList(b64));
-            } catch (IOException e) {
-                return gson.toJson(Collections.singletonList(
-                        Base64.getEncoder().encodeToString(
-                                ("ERROR reading logo: " + e.getMessage()).getBytes()
-                        )
-                ));
-            }
+            Store store = storeManager.getStore(storeName);
+            return store.getStoreLogo();
         }
         else {
             // Manager commands.

@@ -5,7 +5,7 @@
   "FoodCategory": "burger",
   "Stars": 4,
   "NoOfVotes": 30,
-  "StoreLogo": "app/src/main/resources/Logos/BurgerZone.jpg",
+  "StoreLogo": "https://i.postimg.cc/pV1c3fLh/Burger-Zone.jpg",
   "Products": [
     {
       "ProductName": "Classic Burger",

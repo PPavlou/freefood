@@ -5,7 +5,7 @@
   "FoodCategory": "desserts",
   "Stars": 3,
   "NoOfVotes": 9,
-  "StoreLogo": "app/src/main/resources/Logos/SweetTooth.jpg",
+  "StoreLogo": "https://i.postimg.cc/QMsfcS0P/Sweet-Tooth.jpg",
   "Products": [
     {
       "ProductName": "Chocolate Cake",

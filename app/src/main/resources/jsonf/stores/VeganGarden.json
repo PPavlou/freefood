@@ -5,7 +5,7 @@
   "FoodCategory": "vegan",
   "Stars": 4,
   "NoOfVotes": 25,
-  "StoreLogo": "app/src/main/resources/Logos/VeganGarden.jpg",
+  "StoreLogo": "https://i.postimg.cc/sXHKdzsd/Vegan-Garden.jpg",
   "Products": [
     {
       "ProductName": "Vegan Burger",

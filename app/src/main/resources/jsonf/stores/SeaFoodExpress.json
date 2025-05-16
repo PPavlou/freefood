@@ -5,7 +5,7 @@
   "FoodCategory": "seafood",
   "Stars": 5,
   "NoOfVotes": 48,
-  "StoreLogo": "app/src/main/resources/Logos/SeaFoodExpress.jpg",
+  "StoreLogo": "https://i.postimg.cc/8zLyFxBM/Sea-Food-Express.jpg",
   "Products": [
     {
       "ProductName": "Fried Calamari",

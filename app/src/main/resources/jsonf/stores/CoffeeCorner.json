@@ -5,7 +5,7 @@
   "FoodCategory": "coffee",
   "Stars": 5,
   "NoOfVotes": 45,
-  "StoreLogo": "app/src/main/resources/Logos/CoffeeCorner.jpg",
+  "StoreLogo": "https://i.postimg.cc/8PJXG77y/Coffee-Corner.jpg",
   "Products": [
     {
       "ProductName": "Espresso",

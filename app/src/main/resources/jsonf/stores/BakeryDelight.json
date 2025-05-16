@@ -5,7 +5,7 @@
   "FoodCategory": "bakery",
   "Stars": 5,
   "NoOfVotes": 28,
-  "StoreLogo": "app/src/main/resources/Logos/BakeryDelight.jpg",
+  "StoreLogo": "https://i.postimg.cc/0jrWbQcy/Bakery-Delight.jpg",
   "Products": [
     {
       "ProductName": "Croissant",

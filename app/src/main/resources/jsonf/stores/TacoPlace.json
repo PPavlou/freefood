@@ -5,7 +5,7 @@
   "FoodCategory": "mexican",
   "Stars": 2,
   "NoOfVotes": 10,
-  "StoreLogo": "app/src/main/resources/Logos/TacoPlace.jpg",
+  "StoreLogo": "https://i.postimg.cc/DZw5M0VP/Taco-Place.jpg",
   "Products": [
     {
       "ProductName": "Beef Taco",

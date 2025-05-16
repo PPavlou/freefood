@@ -5,7 +5,7 @@
   "FoodCategory": "greek",
   "Stars": 3,
   "NoOfVotes": 12,
-  "StoreLogo": "app/src/main/resources/Logos/SouvlakiKing.jpg",
+  "StoreLogo": "https://i.postimg.cc/pdZqC8Sd/Souvlaki-King-Copy.jpg",
   "Products": [
     {
       "ProductName": "Pork Souvlaki",
