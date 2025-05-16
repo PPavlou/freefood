@@ -2,6 +2,7 @@ package com.example.freefood.PurchaseProduct;
 
 import android.app.Dialog;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.RatingBar;
@@ -33,7 +34,13 @@ public class PurchaseActivity extends AppCompatActivity
         /* ─── toolbar ─── */
         Toolbar tb = findViewById(R.id.toolbarPurchase);
         setSupportActionBar(tb);
-        if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            tb.setNavigationOnClickListener(v -> {
+                // mimic the default back behavior
+                onBackPressed();
+            });
+        }
 
         /* ─── unwrap intent extras ─── */
         storeName = getIntent().getStringExtra("STORE_NAME");
@@ -67,6 +74,16 @@ public class PurchaseActivity extends AppCompatActivity
     /* ─── View callbacks from Presenter ─── */
     @Override public void showMessage(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            // this is the toolbar’s “up” button
+            onBackPressed();   // or just finish()
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override public void clearQuantityField() { etQty.setText(""); }

@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.util.Base64;
+import android.view.MenuItem;
 import android.widget.ImageView;
 import android.widget.Toast;
 
@@ -35,7 +36,13 @@ public class StoreDetailActivity extends AppCompatActivity implements StoreDetai
         /* ─── toolbar & up-button ─── */
         Toolbar tb = findViewById(R.id.toolbar);
         setSupportActionBar(tb);
-        if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            tb.setNavigationOnClickListener(v -> {
+                // mimic the default back behavior
+                onBackPressed();
+            });
+        }
 
         /* ─── unwrap the Store object passed from MainMenuActivity ─── */
         String json = getIntent().getStringExtra("STORE_JSON");
@@ -74,6 +81,15 @@ public class StoreDetailActivity extends AppCompatActivity implements StoreDetai
     }
 
     /* ─── View callbacks ─── */
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            // this is the toolbar’s “up” button
+            onBackPressed();   // or just finish()
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
     @Override public void showProducts(java.util.List<Product> list) { adapter.updateList(list); }
     @Override public void showError(String msg) { Toast.makeText(this, msg, Toast.LENGTH_LONG).show(); }
 }
