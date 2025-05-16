@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.example.freefood.Model.Store;
 import com.example.freefood.R;
+import com.example.freefood.util.ImageUtils;
 
 import java.util.List;
 
@@ -49,29 +50,10 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.Holder> {
         h.distance.setText(" • " + s.getDistanceKm() + " km");
 
         String logo = s.getStoreLogo();
-        if (logo == null || logo.isEmpty()) {
-            // no logo—use placeholder
-            h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
-        } else if (logo.startsWith("http://") || logo.startsWith("https://")) {
-            // It’s already a URL—load it over the network with Glide:
-            try {
-                // 2. Glide it into your ImageView
-                Glide.with(h.imgStore.getContext())
-                        .load(logo)
-                        .placeholder(R.drawable.ic_store_placeholder)
-                        .error(R.drawable.ic_store_placeholder)
-                        .into(h.imgStore);
-            } catch (IllegalArgumentException iae) {
-                h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
-            }
-        }
-        else {
-            h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
-        }
+        ImageUtils.loadStoreLogo(h.imgStore, logo);
 
         h.itemView.setOnClickListener(v -> clickListener.onStoreClick(s));
     }
-
 
 
     @Override public int getItemCount() { return stores.size(); }

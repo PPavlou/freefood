@@ -14,10 +14,12 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
 import com.example.freefood.Model.Product;
 import com.example.freefood.Model.Store;
 import com.example.freefood.PurchaseProduct.PurchaseActivity;
 import com.example.freefood.R;
+import com.example.freefood.util.ImageUtils;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.gson.Gson;
 
@@ -52,15 +54,9 @@ public class StoreDetailActivity extends AppCompatActivity implements StoreDetai
         CollapsingToolbarLayout ctl = findViewById(R.id.collapseToolbar);
         ctl.setTitle(store.getStoreName());
 
-        // TODO: FIX IMAGES THEN UNCOMMENT
-//        ImageView header = findViewById(R.id.imgStoreHeader);
-//        if (store.getStoreLogo() != null && !store.getStoreLogo().isEmpty()) {
-//            byte[] bytes = Base64.decode(store.getStoreLogo(), Base64.DEFAULT);
-//            Bitmap bmp   = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-//            header.setImageBitmap(bmp);
-//        } else {
-//            header.setImageResource(R.drawable.ic_store_placeholder);
-//        }
+        ImageView header = findViewById(R.id.imgStoreHeader);
+        String logo = store.getStoreLogo();
+        ImageUtils.loadStoreLogo(header, logo);
 
         /* ─── RecyclerView ─── */
         RecyclerView rv = findViewById(R.id.rvProducts);
