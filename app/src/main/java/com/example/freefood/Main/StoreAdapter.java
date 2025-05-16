@@ -11,6 +11,8 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.bumptech.glide.Glide;
 import com.example.freefood.Model.Store;
 import com.example.freefood.R;
 
@@ -46,16 +48,24 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.Holder> {
         h.rating.setText(s.getStarRatingString());
         h.distance.setText(" • " + s.getDistanceKm() + " km");
 
-        if (s.getStoreLogo() != null && !s.getStoreLogo().isEmpty()) {
+        String logo = s.getStoreLogo();
+        if (logo == null || logo.isEmpty()) {
+            // no logo—use placeholder
+            h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
+        } else if (logo.startsWith("http://") || logo.startsWith("https://")) {
+            // It’s already a URL—load it over the network with Glide:
             try {
-                byte[] bytes = Base64.decode(s.getStoreLogo(), Base64.DEFAULT);
-                Bitmap bmp  = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                h.imgStore.setImageBitmap(bmp);
+                // 2. Glide it into your ImageView
+                Glide.with(h.imgStore.getContext())
+                        .load(logo)
+                        .placeholder(R.drawable.ic_store_placeholder)
+                        .error(R.drawable.ic_store_placeholder)
+                        .into(h.imgStore);
             } catch (IllegalArgumentException iae) {
-                // bad base-64 ⇒ fall-back
                 h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
             }
-        } else {
+        }
+        else {
             h.imgStore.setImageResource(R.drawable.ic_store_placeholder);
         }
 

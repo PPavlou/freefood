@@ -1,6 +1,7 @@
 package com.example.freefood.Main;
 
 import android.location.Location;
+import android.net.http.UrlRequest;
 import android.util.Log;
 
 import androidx.lifecycle.LiveData;
@@ -11,6 +12,7 @@ import com.example.freefood.Model.Store;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
@@ -118,15 +120,18 @@ public class MainMenuViewModel extends ViewModel {
                     interim.set(i, full);
 
                     // ─── 5) fetch logo ───
-                    String b64resp = nt.sendCommand("GET_LOGO", full.getStoreName());
-                    if (b64resp != null && b64resp.trim().startsWith("[")) {
-                        try {
-                            List<String> arr = gson.fromJson(b64resp, listOfString);
-                            if (!arr.isEmpty()) {
-                                full.setStoreLogo(arr.get(0));
-                            }
-                        } catch (Exception ignored) { }
+                    String urlResp = nt.sendCommand("GET_LOGO", full.getStoreName());
+                    Log.e("StoreFetch", urlResp);
+
+                    try {
+                        List<String> arr = gson.fromJson(urlResp, listOfString);
+                        if (!arr.isEmpty()) {
+                            full.setStoreLogo(arr.get(0));
+                        }
+                    } catch (JsonSyntaxException e) {
+                        Log.e("StoreFetch", "Invalid JSON for logo URL: " + urlResp, e);
                     }
+
                     interim.set(i, full);
                 } catch (Exception ex) {
                     Log.w("MainMenuVM", "Failed to parse STORE_DETAILS JSON for "
