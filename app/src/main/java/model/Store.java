@@ -163,6 +163,22 @@ public class Store {
         return storeName;
     }
 
+    /**
+     * Look up a product by name in this store’s inventory.
+     *
+     * @param productName the product name
+     * @return the Product if found, or null if not present
+     */
+    public Product getProduct(String productName) {
+        if (products == null) return null;
+        for (Product p : products) {
+            if (p.getProductName().equals(productName)) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     /** Sets the store name. */
     public void setStoreName(String storeName) {
         this.storeName = storeName;

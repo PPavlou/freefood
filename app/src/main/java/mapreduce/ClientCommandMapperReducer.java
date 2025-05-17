@@ -1,5 +1,6 @@
 package mapreduce;
 
+import model.Product;
 import model.Store;
 import com.google.gson.Gson;
 import java.util.ArrayList;
@@ -81,8 +82,13 @@ public class ClientCommandMapperReducer {
                     if (storeObj.getStoreName().equals(storeName)) {
                         boolean success = storeObj.purchaseProduct(productName, quantity);
                         if (success) {
+                            int new_available_amount = 0;
+                            for (Product product : storeObj.getProducts()) {
+                                if (product.getProductName().equals(productName))
+                                    new_available_amount = product.getAvailableAmount();
+                            }
                             results.add(new MapReduceFramework.Pair<>(storeName,
-                                    "Successfully purchased " + quantity + " of " + productName + " from store " + storeName + "."));
+                                    "Successfully purchased " + quantity + " of " + productName + " from store " + storeName + "." + "|" + new_available_amount));
                         } else {
                             results.add(new MapReduceFramework.Pair<>(storeName,
                                     "Purchase failed: insufficient stock or product not found."));

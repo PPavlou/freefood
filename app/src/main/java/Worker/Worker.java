@@ -7,6 +7,7 @@ import Manager.ProductManager;
 import mapreduce.ClientCommandMapperReducer;
 import mapreduce.ManagerCommandMapperReducer;
 import mapreduce.MapReduceFramework;
+import model.Product;
 import model.Store;
 import java.io.*;
 import java.net.Socket;
@@ -71,6 +72,24 @@ public class Worker {
             return gson.toJson(Collections.singletonList(
                     new MapReduceFramework.Pair<>(storeName, msg)
             ));
+        }
+
+        if (command.equalsIgnoreCase("GET_STOCK")) {
+            String[] parts = data.split("\\|");
+            if (parts.length < 2) {
+                return "ERROR: Invalid GET_STOCK data";
+            }
+            String storeName = parts[0].trim();
+            String productName = parts[1].trim();
+            Store store = storeManager.getStore(storeName);
+            if (store == null) {
+                return "ERROR: Store not found";
+            }
+            Product prod = store.getProduct(productName);
+            if (prod == null) {
+                return "ERROR: Product not found";
+            }
+            return String.valueOf(prod.getAvailableAmount());
         }
 
         List<MapReduceFramework.Pair<String, Store>> input = new ArrayList<>();
