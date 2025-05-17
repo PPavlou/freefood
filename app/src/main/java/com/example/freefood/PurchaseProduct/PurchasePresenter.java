@@ -7,7 +7,8 @@ public class PurchasePresenter {
         void showMessage(String msg);
         void clearQuantityField();
         void onPurchaseSuccess();
-    }
+        void updateAvailableStock(int newAmount);
+        }
 
     private final PurchaseViewModel vm;
     private final PurchaseView view;
@@ -34,6 +35,15 @@ public class PurchasePresenter {
             view.showMessage(result);
             if (result != null && result.toLowerCase().contains("success")) {
                 view.clearQuantityField();
+                // split off the new stock count after the '|'
+                String[] parts = result.split("\\|");
+                if (parts.length > 1) {
+                    String digitsOnly = parts[1].replaceAll("\\D+", "");
+                    if (!digitsOnly.isEmpty()) {
+                        int newAmt = Integer.parseInt(digitsOnly);
+                        view.updateAvailableStock(newAmt);
+                    }
+                }
                 view.onPurchaseSuccess();
             }
         });
