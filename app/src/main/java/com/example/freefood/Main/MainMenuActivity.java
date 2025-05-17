@@ -70,7 +70,18 @@ public class MainMenuActivity extends AppCompatActivity {
         vm.getStores().observe(this, this::showStores);
 
         // —— always use DEFAULT coords ——
+        vm = new ViewModelProvider(this).get(MainMenuViewModel.class);
+        vm.getStores().observe(this, this::showStores);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // show loading spinner
         pbLoading.setVisibility(View.VISIBLE);
+
+        // reload stores with default coordinates every time we resume
         vm.loadStores(DEFAULT_LAT, DEFAULT_LON);
     }
 
