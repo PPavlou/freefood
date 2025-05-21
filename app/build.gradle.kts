@@ -44,6 +44,7 @@ dependencies {
 
     // Google Play Services Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation(libs.swiperefreshlayout)
 
     // Testing dependencies
     testImplementation("junit:junit:4.13.2")
