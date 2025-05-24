@@ -81,7 +81,7 @@ public class MasterServer {
                 if ("REGISTER".equalsIgnoreCase(line)) {
                     String data = in.readLine();
                     String[] parts = data.split("\\|", 3);
-                    String user = parts[1], pass = parts[2];
+                    String user = parts[0], pass = parts[1];
                     if (userCredentials.containsKey(user)) {
                         out.println("ERROR:USER_EXISTS");
                     } else {
@@ -96,7 +96,7 @@ public class MasterServer {
                 if ("LOGIN".equalsIgnoreCase(line)) {
                     String data = in.readLine();               // "username|password"
                     String[] parts = data.split("\\|", 3);
-                    String user = parts[1], pass = parts[2];
+                    String user = parts[0], pass = parts[1];
                     if (!userCredentials.containsKey(user) ||
                             !userCredentials.get(user).equals(pass)) {
                         out.println("ERROR:INVALID_CREDENTIALS");
