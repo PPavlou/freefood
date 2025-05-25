@@ -36,7 +36,7 @@ public class ActionForClients implements Runnable {
             final Set<String> managerCmds = new HashSet<>(Arrays.asList(
                     "ADD_PRODUCT", "REMOVE_PRODUCT",
                     "UPDATE_PRODUCT_AMOUNT", "INCREMENT_PRODUCT_AMOUNT",
-                    "DECREMENT_PRODUCT_AMOUNT", "PURCHASE_PRODUCT",
+                    "DECREMENT_PRODUCT_AMOUNT", "PURCHASE_PRODUCT","STORE_DETAILS","GET_STOCK","GET_LOGO",
                     "REVIEW", "ADD_STORE", "REMOVE_STORE",
                     // also exempt these reduce/list commands
                     "SEARCH", "AGGREGATE_SALES_BY_PRODUCT_NAME",
@@ -120,7 +120,7 @@ public class ActionForClients implements Runnable {
         Set<String> directed = Set.of(
                 "ADD_PRODUCT","REMOVE_PRODUCT",
                 "UPDATE_PRODUCT_AMOUNT","INCREMENT_PRODUCT_AMOUNT",
-                "DECREMENT_PRODUCT_AMOUNT","PURCHASE_PRODUCT","REVIEW"
+                "DECREMENT_PRODUCT_AMOUNT","PURCHASE_PRODUCT","REVIEW","STORE_DETAILS","GET_STOCK","GET_LOGO"
         );
 
         if (directed.contains(cmd.toUpperCase())) {
