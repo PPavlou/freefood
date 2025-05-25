@@ -52,7 +52,10 @@ public class NetworkTask extends AsyncTask<String, Void, String> {
         boolean needsToken = sessionToken != null
                 && !command.equals("PURCHASE_PRODUCT")
                 && !command.equals("REVIEW")
-                && !command.equals("SEARCH");
+                && !command.equals("SEARCH")
+                && !command.equals("STORE_DETAILS")
+                && !command.equals("GET_STOCK")
+                && !command.equals("GET_LOGO");
 
         String payload = needsToken
                 ? sessionToken + "|" + data
