@@ -79,34 +79,135 @@ public class MasterServer {
 
                 String line = in.readLine();
                 if ("REGISTER".equalsIgnoreCase(line)) {
-                    String data = in.readLine();
-                    String[] parts = data.split("\\|", 3);
-                    String user = parts[1], pass = parts[2];
-                    if (userCredentials.containsKey(user)) {
-                        out.println("ERROR:USER_EXISTS");
-                    } else {
-                        userCredentials.put(user, pass);
-                        saveCredentials();
-                        out.println("REGISTER_SUCCESS");
+                    try {
+                        String data = in.readLine(); // Potential IOException or null return
+
+                        if (data == null) {
+                            if (out != null) {
+                                out.println("ERROR:NO_DATA_FOR_REGISTER");
+                            }
+                            System.err.println("REGISTER: No data received after REGISTER command.");
+                        } else {
+                            String[] parts = data.split("\\|", -1); // Split by pipe, -1 preserves trailing empty strings
+                            String user = null;
+                            String pass = null;
+
+                            if (parts.length == 2) { // Expected format: "username|password"
+                                user = parts[0];
+                                pass = parts[1];
+                            } else if (parts.length >= 3) { // Expected format: "ignored_prefix|username|password" (or more parts, we only care about user/pass)
+                                user = parts[1];
+                                pass = parts[2];
+                            } else {
+                                // Invalid format (e.g., "username_only", "", or less than 2 parts)
+                                if (out != null) {
+                                    out.println("ERROR:INVALID_REGISTER_FORMAT");
+                                }
+                                System.err.println("REGISTER: Invalid data format (expected 2 or >=3 parts): " + data);
+                            }
+
+                            // Proceed only if user and pass were successfully parsed
+                            if (user != null && pass != null) {
+                                // Optional: Add validation for empty username if required
+                                if (user.isEmpty()) {
+                                    if (out != null) out.println("ERROR:USERNAME_CANNOT_BE_EMPTY");
+                                    System.err.println("REGISTER: Username was empty. Data: " + data);
+                                } else if (userCredentials.containsKey(user)) {
+                                    if (out != null) {
+                                        out.println("ERROR:USER_EXISTS");
+                                    }
+                                } else {
+                                    userCredentials.put(user, pass);
+                                    saveCredentials(); // Potential IOException or other errors during save
+                                    if (out != null) {
+                                        out.println("REGISTER_SUCCESS");
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception e) { // Catches IOException, NullPointerException, ArrayIndexOutOfBoundsException, etc.
+                        System.err.println("Error during REGISTER processing: " + e.getMessage());
+                        // e.printStackTrace(); // Uncomment for detailed stack trace during debugging
+                        if (out != null) {
+                            out.println("ERROR:SERVER_ERROR_DURING_REGISTER");
+                        }
+                    } finally {
+                        try {
+                            if (sock != null && !sock.isClosed()) {
+                                sock.close();
+                            }
+                        } catch (IOException ex) {
+                            System.err.println("IOException while closing socket after REGISTER: " + ex.getMessage());
+                        }
                     }
-                    sock.close();
-                    continue;
+                    continue; // Continue to the next iteration of the server loop
                 }
-                // --- handle LOGIN ---
+
+// --- handle LOGIN ---
                 if ("LOGIN".equalsIgnoreCase(line)) {
-                    String data = in.readLine();               // "username|password"
-                    String[] parts = data.split("\\|", 3);
-                    String user = parts[1], pass = parts[2];
-                    if (!userCredentials.containsKey(user) ||
-                            !userCredentials.get(user).equals(pass)) {
-                        out.println("ERROR:INVALID_CREDENTIALS");
-                    } else {
-                        String token = UUID.randomUUID().toString();
-                        userSessions.put(token, user);
-                        out.println("LOGIN_SUCCESS|" + token);
+                    try {
+                        String data = in.readLine(); // Potential IOException or null return
+
+                        if (data == null) {
+                            if (out != null) {
+                                out.println("ERROR:NO_DATA_FOR_LOGIN");
+                            }
+                            System.err.println("LOGIN: No data received after LOGIN command.");
+                        } else {
+                            String[] parts = data.split("\\|", -1); // Split by pipe, -1 preserves trailing empty strings
+                            String user = null;
+                            String pass = null;
+
+                            if (parts.length == 2) { // Expected format: "username|password"
+                                user = parts[0];
+                                pass = parts[1];
+                            } else if (parts.length >= 3) { // Expected format: "ignored_prefix|username|password" (or more)
+                                user = parts[1];
+                                pass = parts[2];
+                            } else {
+                                // Invalid format
+                                if (out != null) {
+                                    out.println("ERROR:INVALID_LOGIN_FORMAT");
+                                }
+                                System.err.println("LOGIN: Invalid data format (expected 2 or >=3 parts): " + data);
+                            }
+
+                            // Proceed only if user and pass were successfully parsed
+                            if (user != null && pass != null) {
+                                // Optional: Add validation for empty username if required for login
+                                if (user.isEmpty()) {
+                                    if (out != null) out.println("ERROR:USERNAME_CANNOT_BE_EMPTY_FOR_LOGIN");
+                                    System.err.println("LOGIN: Username was empty. Data: " + data);
+                                } else if (!userCredentials.containsKey(user) ||
+                                        !userCredentials.get(user).equals(pass)) {
+                                    if (out != null) {
+                                        out.println("ERROR:INVALID_CREDENTIALS");
+                                    }
+                                } else {
+                                    String token = UUID.randomUUID().toString();
+                                    userSessions.put(token, user);
+                                    if (out != null) {
+                                        out.println("LOGIN_SUCCESS|" + token);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception e) { // Catches IOException, NullPointerException, ArrayIndexOutOfBoundsException, etc.
+                        System.err.println("Error during LOGIN processing: " + e.getMessage());
+                        // e.printStackTrace(); // Uncomment for detailed stack trace during debugging
+                        if (out != null) {
+                            out.println("ERROR:SERVER_ERROR_DURING_LOGIN");
+                        }
+                    } finally {
+                        try {
+                            if (sock != null && !sock.isClosed()) {
+                                sock.close();
+                            }
+                        } catch (IOException ex) {
+                            System.err.println("IOException while closing socket after LOGIN: " + ex.getMessage());
+                        }
                     }
-                    sock.close();
-                    continue;
+                    continue; // Continue to the next iteration of the server loop
                 }
                 if ("WORKER_HANDSHAKE".equals(line)) {
                     int wp = Integer.parseInt(in.readLine().trim());
