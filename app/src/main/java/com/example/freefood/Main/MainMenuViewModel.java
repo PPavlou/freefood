@@ -188,8 +188,8 @@ public class MainMenuViewModel extends ViewModel {
 
         new Thread(() -> {
             NetworkTask nt = new NetworkTask(
-                    MainActivityTEMP.SERVER_HOST,
-                    MainActivityTEMP.SERVER_PORT,
+                    MainMenuActivity.SERVER_HOST,
+                    MainMenuActivity.SERVER_PORT,
                     null
             );
             Gson gson = new Gson();
@@ -231,8 +231,8 @@ public class MainMenuViewModel extends ViewModel {
 
         new Thread(() -> {
             NetworkTask nt = new NetworkTask(
-                    MainActivityTEMP.SERVER_HOST,
-                    MainActivityTEMP.SERVER_PORT,
+                    MainMenuActivity.SERVER_HOST,
+                    MainMenuActivity.SERVER_PORT,
                     null
             );
             Gson gson = new Gson();
@@ -265,8 +265,8 @@ public class MainMenuViewModel extends ViewModel {
 
         new Thread(() -> {
             NetworkTask nt = new NetworkTask(
-                    MainActivityTEMP.SERVER_HOST,
-                    MainActivityTEMP.SERVER_PORT,
+                    MainMenuActivity.SERVER_HOST,
+                    MainMenuActivity.SERVER_PORT,
                     null
             );
             Gson gson = new Gson();
@@ -297,8 +297,8 @@ public class MainMenuViewModel extends ViewModel {
 
         new Thread(() -> {
             NetworkTask nt = new NetworkTask(
-                    MainActivityTEMP.SERVER_HOST,
-                    MainActivityTEMP.SERVER_PORT,
+                    MainMenuActivity.SERVER_HOST,
+                    MainMenuActivity.SERVER_PORT,
                     null
             );
             Gson gson = new Gson();
@@ -323,8 +323,8 @@ public class MainMenuViewModel extends ViewModel {
 
         new Thread(() -> {
             NetworkTask nt = new NetworkTask(
-                    MainActivityTEMP.SERVER_HOST,
-                    MainActivityTEMP.SERVER_PORT,
+                    MainMenuActivity.SERVER_HOST,
+                    MainMenuActivity.SERVER_PORT,
                     null
             );
             Gson gson = new Gson();

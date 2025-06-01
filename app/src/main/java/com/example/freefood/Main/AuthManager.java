@@ -25,7 +25,7 @@ public class AuthManager {
 
     public AuthManager(Context ctx) {
         prefs       = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        nt          = new NetworkTask(MainActivityTEMP.SERVER_HOST, MainActivityTEMP.SERVER_PORT, null);
+        nt          = new NetworkTask(MainMenuActivity.SERVER_HOST, MainMenuActivity.SERVER_PORT, null);
         mainHandler = new Handler(Looper.getMainLooper());
     }
 

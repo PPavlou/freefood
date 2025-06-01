@@ -14,7 +14,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
-import com.example.freefood.Main.MainActivityTEMP;
+import com.example.freefood.Main.MainMenuActivity;
 import com.example.freefood.Main.NetworkTask;
 import com.example.freefood.Model.Product;
 import com.example.freefood.R;
@@ -64,8 +64,8 @@ public class PurchaseActivity extends AppCompatActivity
 
         // ─── MVP hookup ───
         PurchaseViewModel vm = new PurchaseViewModelFactory()
-                .create(MainActivityTEMP.SERVER_HOST,
-                        MainActivityTEMP.SERVER_PORT);
+                .create(MainMenuActivity.SERVER_HOST,
+                        MainMenuActivity.SERVER_PORT);
         presenter = new PurchasePresenter(vm, this);
 
         btnBuy.setOnClickListener(v ->
@@ -82,8 +82,8 @@ public class PurchaseActivity extends AppCompatActivity
         super.onResume();
 
         new NetworkTask(
-                MainActivityTEMP.SERVER_HOST,
-                MainActivityTEMP.SERVER_PORT,
+                MainMenuActivity.SERVER_HOST,
+                MainMenuActivity.SERVER_PORT,
                 res -> runOnUiThread(() -> {
                     String payload = res;
                     if (payload.startsWith("[")) {
@@ -153,8 +153,8 @@ public class PurchaseActivity extends AppCompatActivity
         submit.setOnClickListener(v -> {
             int rating = Math.max(1, Math.round(ratingBar.getRating()));
             new NetworkTask(
-                    MainActivityTEMP.SERVER_HOST,
-                    MainActivityTEMP.SERVER_PORT,
+                    MainMenuActivity.SERVER_HOST,
+                    MainMenuActivity.SERVER_PORT,
                     res -> runOnUiThread(() ->
                             Toast.makeText(this,
                                     "Thanks for rating!",

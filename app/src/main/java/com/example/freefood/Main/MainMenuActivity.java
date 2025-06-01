@@ -33,6 +33,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainMenuActivity extends AppCompatActivity {
+    public static final String SERVER_HOST = "10.0.2.2";
+    public static final int SERVER_PORT = 12345;
     private static final String PREFS_NAME   = "auth";
     // These coordinates must exactly match the ones your store JSON uses.
     private static final double DEFAULT_LAT  = 37.994124;
